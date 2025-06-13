@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang chính - Moto50Hub</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+        }
+        nav {
+            top: 0;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Thanh điều hướng -->
+    <nav class="bg-white shadow-md py-4 fixed w-full z-10">
+        <div class="container mx-auto flex justify-between items-center px-6">
+            <a href="/" class="flex items-center space-x-2">
+                <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12">
+                <span class="text-xl font-semibold text-gray-800 hover:text-red-600">MotoHub</span>
+            </a>
+            <div class="flex space-x-6 items-center">
+                <a href="/" class="text-gray-600 hover:text-red-600 text-lg">Trang chủ</a>
+                <a href="/search" class="text-gray-600 hover:text-red-600 text-lg">Tìm kiếm</a>
+                {% if not user %}
+                    <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Đăng nhập</a>
+                {% else %}
+                    <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Trang chính</a>
+                    <a href="/api/auth/logout" class="text-gray-600 hover:text-red-600 text-lg" onclick="dangXuat(event)">Đăng xuất</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Nội dung chính -->
+    <div class="pt-20 pb-12">
+        <div class="container mx-auto p-6">
+            <div class="grid grid-cols-2 gap-4">
+                <a href="/maintenance" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/Service.jpg" alt="Đặt lịch chăm sóc xe" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">Đặt lịch chăm sóc xe</p>
+                </a>
+                <a href="/profile" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/Account service.jpg" alt="Hồ sơ tài khoản" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">Hồ sơ tài khoản</p>
+                </a>
+                <a href="/custom3d" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/Custom.jpg" alt="Tùy chỉnh 3D" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">Tùy chỉnh 3D</p>
+                </a>
+                <a href="/community" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/Community.jpg" alt="Cộng đồng" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">Cộng đồng</p>
+                </a>
+                <a href="/promotion" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/Promo.jpg" alt="Khuyến mãi" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">Khuyến mãi</p>
+                </a>
+                <a href="/instruction" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/Instrc.jpg" alt="Hướng dẫn" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">Hướng dẫn</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chân trang -->
+    <footer class="bg-gray-800 text-white py-8">
+        <div class="container mx-auto text-center">
+            <div class="mb-4">
+                <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12 mx-auto mb-4">
+                <p class="text-sm">Tài nguyên | Miễn phí | Podcast YouTube</p>
+            </div>
+            <div class="mb-4">
+                <p><strong>Liên hệ:</strong> 0909 123 456 | support@motohub.com</p>
+                <p><strong>Địa chỉ:</strong> 123 Đường Lê Lợi, Quận 1, TP.HCM</p>
+            </div>
+            <div class="space-x-4 mb-4">
+                <a href="#" class="text-gray-400 hover:text-white">Facebook</a>
+                <a href="#" class="text-gray-400 hover:text-white">YouTube</a>
+                <a href="#" class="text-gray-400 hover:text-white">Zalo</a>
+            </div>
+            <div class="text-sm">
+                <a href="/privacy" class="text-gray-400 hover:text-white mr-2">Chính sách bảo mật</a>
+                <a href="/terms" class="text-gray-400 hover:text-white">Điều khoản sử dụng</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function dangXuat(event) {
+            event.preventDefault();
+            fetch('/api/auth/logout', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                })
+                .catch(error => console.error('Lỗi đăng xuất:', error));
+        }
+    </script>
+</body>
+</html>

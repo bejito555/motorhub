@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moto50Hub Sign-up</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="bg-white min-h-screen flex items-center justify-center">
+    <div class="flex w-full max-w-4xl h-[80vh] overflow-hidden rounded-lg shadow-lg">
+        <!-- Left Side: Only Logo with White Background -->
+        <div class="relative w-1/2 bg-white flex items-center justify-center">
+            <div class="relative z-10 text-center">
+                <img src="/static/motorhub-1.png" alt="Moto50Hub Logo" class="mx-auto h-48">
+            </div>
+        </div>
+        <!-- Right Side: Sign-up Form -->
+        <div class="w-1/2 bg-white p-10 flex flex-col justify-center">
+            <h2 class="text-2xl font-semibold text-center mb-6">Đăng ký</h2>
+            <form id="signupForm" class="space-y-4">
+                <div>
+                    <label for="fullName" class="block text-gray-700">Họ và tên</label>
+                    <input type="text" id="fullName" name="fullName" class="w-full p-2 border rounded" placeholder="Nhập họ và tên của bạn" required>
+                </div>
+                <div>
+                    <label for="email" class="block text-gray-700">Email</label>
+                    <input type="email" id="email" name="email" class="w-full p-2 border rounded" placeholder="Nhập email của bạn" required>
+                </div>
+                <div>
+                    <label for="password" class="block text-gray-700">Mật khẩu</label>
+                    <input type="password" id="password" name="password" class="w-full p-2 border rounded" placeholder="Nhập mật khẩu của bạn" required>
+                </div>
+                <div>
+                    <label for="confirmPassword" class="block text-gray-700">Xác nhận mật khẩu</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" class="w-full p-2 border rounded" placeholder="Nhập lại mật khẩu" required>
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" id="terms" class="mr-2">
+                    <label for="terms" class="text-gray-700 text-sm">Tôi đồng ý với Điều khoản & Điều kiện</label>
+                </div>
+                <button type="submit" class="w-full bg-red-600 text-white p-2 rounded hover:bg-red-700">Đăng ký tài khoản</button>
+            </form>
+            <div class="mt-4 text-center">
+                <div id="g_id_onload"
+                     data-client_id="902578496557-k0kq281u6g8rv87dk67g3lpdcl5rjqa4.apps.googleusercontent.com"
+                     data-callback="handleGoogleSignUp">
+                </div>
+                <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="signup_with" data-shape="rectangular" data-logo_alignment="left"></div>
+            </div>
+            <p class="text-center mt-4 text-gray-600">
+                Đã có tài khoản? <a href="/login" class="text-red-600 hover:underline">Đăng nhập tại đây</a>
+            </p>
+            <p id="message" class="text-center mt-2 text-red-600"></p>
+        </div>
+    </div>
+    <script>
+        function handleGoogleSignUp(response) {
+            const token = response.credential;
+            const message = document.getElementById('message');
+            fetch('/api/auth/google', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.token) {
+                    localStorage.setItem('token', data.token);
+                    window.location.href = '/';
+                } else {
+                    message.textContent = data.detail || 'Đăng ký Google thất bại';
+                }
+            })
+            .catch(error => {
+                console.error('Lỗi đăng ký Google:', error);
+                message.textContent = 'Lỗi kết nối server: ' + error.message;
+            });
+        }
+
+        document.getElementById('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fullName = document.getElementById('fullName').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const message = document.getElementById('message');
+
+            if (password !== confirmPassword) {
+                message.textContent = 'Mật khẩu và xác nhận mật khẩu không khớp';
+                return;
+            }
+
+            if (!document.getElementById('terms').checked) {
+                message.textContent = 'Vui lòng đồng ý với Điều khoản & Điều kiện';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/register/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fullName, email, password })
+                });
+                console.log('Signup request status:', response.status);
+                const data = await response.json();
+                console.log('Signup request data:', data);
+                if (response.ok) {
+                    message.textContent = 'Mã OTP đã được gửi đến email của bạn!';
+                    window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
+                } else {
+                    message.textContent = data.detail || 'Yêu cầu đăng ký thất bại';
+                }
+            } catch (error) {
+                console.error('Lỗi đăng ký:', error);
+                message.textContent = 'Lỗi kết nối server: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

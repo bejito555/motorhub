@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance - MotoHub</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f9fafb;
+            margin: 0;
+        }
+        nav {
+            top: 0;
+            z-index: 1000;
+        }
+        .content {
+            padding: 8rem 1rem 2rem 1rem;
+            min-height: 100vh;
+        }
+        .calendar {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            background: white;
+            width: 300px;
+        }
+        .calendar select {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+        }
+        .calendar .days {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.25rem;
+        }
+        .calendar .days span {
+            text-align: center;
+            padding: 0.5rem;
+            cursor: pointer;
+        }
+        .calendar .days .selected {
+            background-color: #ef4444;
+            color: white;
+            border-radius: 9999px;
+        }
+        .time-slots button {
+            padding: 0.5rem 1rem;
+            margin: 0.25rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            background: white;
+            cursor: pointer;
+        }
+        .time-slots button.selected {
+            background-color: #ef4444;
+            color: white;
+        }
+        .disabled {
+            background-color: #f3f4f6;
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .maintenance-form-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+        }
+        @media (max-width: 768px) {
+            .content {
+                padding: 8rem 0.5rem 1rem 0.5rem;
+            }
+            .maintenance-form-container {
+                max-width: 100%;
+                padding: 1rem;
+            }
+            .calendar {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-white shadow-md py-4 fixed w-full z-10">
+        <div class="container mx-auto flex justify-between items-center px-6">
+            <a href="/" class="flex items-center space-x-2">
+                <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12">
+                <span class="text-xl font-semibold text-gray-800 hover:text-red-600">MotoHub</span>
+            </a>
+            <div class="flex space-x-6 items-center">
+                <a href="/" class="text-gray-600 hover:text-red-600 text-lg">Trang chủ</a>
+                <a href="/search" class="text-gray-600 hover:text-red-600 text-lg">Tìm kiếm</a>
+                {% if not user %}
+                    <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Đăng nhập</a>
+                {% else %}
+                    <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Trang chính</a>
+                    <a href="/api/auth/logout" class="text-gray-600 hover:text-red-600 text-lg" onclick="dangXuat(event)">Đăng xuất</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="content">
+        <div class="container mx-auto">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Đặt lịch bảo dưỡng</h1>
+            {% if user %}
+                <div class="maintenance-form-container">
+                    <form id="maintenanceForm" class="space-y-6">
+                        <div>
+                            <label for="bikeModel" class="block text-gray-700 font-semibold">Chọn xe:</label>
+                            <select id="bikeModel" class="w-full p-2 border rounded" required></select>
+                        </div>
+                        <div>
+                            <label for="maintenanceDate" class="block text-gray-700 font-semibold">Chọn ngày:</label>
+                            <div class="calendar" id="calendar">
+                                <select id="monthYear" onchange="updateCalendar()">
+                                    <option value="2025-06">June 2025</option>
+                                    <option value="2025-07">July 2025</option>
+                                    <option value="2025-08" selected>August 2025</option>
+                                </select>
+                                <div class="days" id="calendarDays"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="maintenanceTime" class="block text-gray-700 font-semibold">Chọn thời gian:</label>
+                            <div class="time-slots" id="timeSlots">
+                                <button type="button">8:00</button>
+                                <button type="button">9:00</button>
+                                <button type="button">10:00</button>
+                                <button type="button">11:00</button>
+                                <button type="button">12:00</button>
+                                <button type="button">13:00</button>
+                                <button type="button">14:00</button>
+                                <button type="button">15:00</button>
+                                <button type="button">16:00</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-semibold">Chọn địa điểm:</label>
+                            <div class="space-y-2">
+                                <select id="province" class="w-full p-2 border rounded" onchange="updateDistricts()">
+                                    <option value="">Chọn Tỉnh/Thành phố</option>
+                                    <option value="TPHCM" selected>TP. Hồ Chí Minh</option>
+                                </select>
+                                <select id="district" class="w-full p-2 border rounded" onchange="updateShops()">
+                                    <option value="">Chọn Quận/Huyện</option>
+                                    <option value="ThuDuc" selected>TP. Thủ Đức</option>
+                                </select>
+                                <select id="shop" class="w-full p-2 border rounded" required>
+                                    <option value="">Chọn cửa hàng</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full bg-red-600 text-white p-3 rounded-lg hover:bg-red-700 font-medium">Đặt lịch</button>
+                    </form>
+                    <div id="maintenanceMessage" class="mt-4 text-red-600 text-center"></div>
+                    {% if maintenance_due %}
+                        <div class="bg-yellow-100 p-4 rounded-lg shadow-md mt-6">
+                            <p class="text-yellow-800"><strong>Thông báo:</strong> {{ maintenance_due }}</p>
+                            <a href="/search" class="text-red-600 hover:underline">Đặt lịch bảo dưỡng ngay</a>
+                        </div>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p class="text-gray-600 text-center text-lg">Vui lòng đăng nhập để đặt lịch bảo dưỡng.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // Hardcoded shop list for TP. Thủ Đức
+        const shops = {
+            "ThuDuc": [
+                { name: "HEAD Timexco", address: "701-719 Khả Văn Cân, P. Linh Tây, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "028 3897 1517", fanpage: "HEAD Timexco" },
+                { name: "HEAD Sơn Minh #2", address: "115-117 Lê Văn Việt, P. Hiệp Phú, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "2837308708", fanpage: "HEAD Sơn Minh #2" },
+                { name: "HEAD Lai Hưng #4", address: "198 Quốc lộ 13, P. Hiệp Bình Chánh, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "02822411668", fanpage: "HEAD Lai Hưng #4" },
+                { name: "HEAD Việt Thái Quân #2", address: "111 Nguyễn Duy Trinh, P. Bình Trung Tây, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "02837437567", fanpage: "HEAD Việt Thái Quân #2" },
+                { name: "HEAD Bình Minh #2", address: "234 V6 Vĩnh Niệm, P. Bình Thọ, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "2866838339", fanpage: "HEAD Bình Minh #2" },
+                { name: "HEAD Sơn Minh #5", address: "113 Đỗ Xuân Hợp, Tố 4, Khu phố 2, P. Phước Long, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "Không rõ", fanpage: "HEAD Sơn Minh #5" },
+                { name: "HEAD Hồng Hạnh #5", address: "565 Quốc lộ 13, Hiệp Bình Phước, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "02873068658", fanpage: "HEAD Hồng Hạnh #5" },
+                { name: "HEAD Minh Thinh Phát #3", address: "519 Khả Văn Cân, P. Linh Đông, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "02836203152", fanpage: "HEAD Minh Thinh Phát #3" },
+                { name: "HEAD Tôn Trung #6", address: "264-266-268 Nguyễn Văn Tăng, Phường Long Thạnh Mỹ, Thành phố Hồ Chí Minh, TP. Thủ Đức, TP. Hồ Chí Minh", phone: "093184168", fanpage: "HEAD Tôn Trung #6" }
+            ]
+        };
+
+        function dangXuat(event) {
+            event.preventDefault();
+            fetch('/api/auth/logout', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
+                    showToast('Failed to logout.', 'error');
+                });
+        }
+
+        window.onload = function() {
+            const userId = JSON.parse('{{ user.id|default("null")|tojson|safe }}');
+            if (userId) {
+                updateMaintenanceForm();
+                updateDistricts(); // Initialize districts
+                updateShops();     // Initialize shops
+                updateCalendar();
+                disablePastTimes();
+            }
+        };
+
+        function updateMaintenanceForm() {
+            const userId = JSON.parse('{{ user.id|default("null")|tojson|safe }}');
+            if (!userId) return;
+
+            fetch(`/api/user_bikes?user_id=${userId}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Endpoint /api/user_bikes không khả dụng');
+                    return response.json();
+                })
+                .then(data => {
+                    const select = document.getElementById("bikeModel");
+                    select.innerHTML = "";
+                    const userBikes = data.bikes || [];
+                    if (userBikes.length > 0) {
+                        userBikes.forEach(bike => {
+                            const option = document.createElement("option");
+                            option.value = bike.bike_model;
+                            option.textContent = bike.bike_model;
+                            select.appendChild(option);
+                        });
+                    } else {
+                        const option = document.createElement("option");
+                        option.value = "";
+                        option.textContent = "Không có xe để chọn";
+                        select.appendChild(option);
+                    }
+                })
+                .catch(error => {
+                    console.error("Lỗi tải danh sách xe cho đặt lịch:", error);
+                    const select = document.getElementById("bikeModel");
+                    select.innerHTML = "<option value=''>Không thể tải danh sách xe</option>";
+                });
+        }
+
+        function updateDistricts() {
+            const province = document.getElementById("province").value;
+            const districtSelect = document.getElementById("district");
+            districtSelect.innerHTML = '<option value="">Chọn Quận/Huyện</option>';
+
+            if (province === "TPHCM") {
+                const option = document.createElement("option");
+                option.value = "ThuDuc";
+                option.textContent = "TP. Thủ Đức";
+                districtSelect.appendChild(option);
+            }
+            updateShops(); // Update shops based on default district
+        }
+
+        function updateShops() {
+            const district = document.getElementById("district").value;
+            const shopSelect = document.getElementById("shop");
+            shopSelect.innerHTML = '<option value="">Chọn cửa hàng</option>';
+
+            if (district === "ThuDuc" && shops[district]) {
+                shops[district].forEach(shop => {
+                    const option = document.createElement("option");
+                    option.value = shop.name;
+                    option.textContent = `${shop.name} - ${shop.address}`;
+                    shopSelect.appendChild(option);
+                });
+            }
+        }
+
+        function updateCalendar() {
+            const today = new Date();
+            const currentMonthYear = document.getElementById('monthYear').value;
+            const [year, month] = currentMonthYear.split('-');
+            const daysContainer = document.getElementById('calendarDays');
+            daysContainer.innerHTML = '';
+
+            const firstDay = new Date(year, month - 1, 1);
+            const lastDay = new Date(year, month, 0);
+            const daysInMonth = lastDay.getDate();
+            const startingDay = firstDay.getDay() || 7;
+
+            const daysOfWeek = ['Mo', 'Tu', 'We', 'Th', 'Fri', 'Sa', 'Su'];
+            daysOfWeek.forEach(day => {
+                const span = document.createElement('span');
+                span.textContent = day;
+                span.classList.add('font-semibold', 'text-gray-700');
+                daysContainer.appendChild(span);
+            });
+
+            for (let i = 1; i < startingDay; i++) {
+                const span = document.createElement('span');
+                daysContainer.appendChild(span);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const span = document.createElement('span');
+                span.textContent = day;
+                const date = new Date(year, month - 1, day);
+                if (date < today && date.getDate() !== today.getDate()) {
+                    span.classList.add('disabled');
+                } else {
+                    span.addEventListener('click', () => {
+                        document.querySelectorAll('.calendar .days .selected').forEach(selected => selected.classList.remove('selected'));
+                        span.classList.add('selected');
+                        disablePastTimes();
+                    });
+                }
+                daysContainer.appendChild(span);
+            }
+        }
+
+        function disablePastTimes() {
+            const selectedDate = document.querySelector('.calendar .days .selected');
+            if (!selectedDate) return;
+
+            const today = new Date();
+            const [year, month] = document.getElementById('monthYear').value.split('-');
+            const day = selectedDate.textContent;
+            const selectedDateTime = new Date(year, month - 1, day);
+            const timeButtons = document.querySelectorAll('.time-slots button');
+
+            timeButtons.forEach(button => {
+                button.classList.remove('disabled', 'selected');
+                const [hours, minutes] = button.textContent.split(':');
+                const buttonTime = new Date(selectedDateTime);
+                buttonTime.setHours(hours, minutes, 0, 0);
+
+                if (selectedDateTime.toDateString() === today.toDateString() && buttonTime <= today) {
+                    button.classList.add('disabled');
+                } else {
+                    button.addEventListener('click', () => {
+                        document.querySelectorAll('.time-slots .selected').forEach(selected => selected.classList.remove('selected'));
+                        if (!button.classList.contains('disabled')) {
+                            button.classList.add('selected');
+                        }
+                    }, { once: true });
+                }
+            });
+        }
+
+        document.getElementById("maintenanceForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const userId = JSON.parse('{{ user.id|default("null")|tojson|safe }}');
+            if (!userId) {
+                showToast('Vui lòng đăng nhập để đặt lịch!', 'error');
+                return;
+            }
+            const bikeModel = document.getElementById("bikeModel").value;
+            const selectedDate = document.querySelector('.calendar .days .selected');
+            const selectedTime = document.querySelector('.time-slots .selected');
+            const location = document.getElementById("shop").value; // Updated to use shop dropdown
+            if (!bikeModel || !selectedDate || !selectedTime || selectedTime.classList.contains('disabled') || !location) {
+                showToast("Vui lòng chọn xe, ngày, thời gian và địa điểm hợp lệ!", 'error');
+                return;
+            }
+            const [year, month] = document.getElementById('monthYear').value.split('-');
+            const day = selectedDate.textContent;
+            try {
+                const response = await fetch("/api/book_maintenance", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        date: `${year}-${month}-${day}`,
+                        time: selectedTime.textContent,
+                        bike_model: bikeModel,
+                        location: location
+                    })
+                });
+                if (!response.ok) throw new Error('Lỗi đặt lịch bảo dưỡng');
+                const data = await response.json();
+                showToast(data.message, 'success');
+                setTimeout(() => {
+                    document.getElementById("maintenanceForm").reset();
+                    updateCalendar();
+                    disablePastTimes();
+                    updateDistricts(); // Reset to default district
+                    updateShops();     // Reset shop list
+                }, 3000);
+            } catch (error) {
+                console.error("Lỗi đặt lịch bảo dưỡng:", error);
+                showToast("Lỗi khi đặt lịch, vui lòng thử lại!", 'error');
+            }
+        });
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

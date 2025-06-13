@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang chủ - Moto50Hub</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .hero-bg {
+            background-size: cover;
+            background-position: center;
+            height: 70vh;
+            position: relative;
+            background-image: url('/static/homepage.jpg');
+        }
+        .hero-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .fade-in {
+            animation: fadeIn 1s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .service-card {
+            transition: transform 0.3s ease;
+        }
+        .service-card:hover {
+            transform: translateY(-5px);
+        }
+        nav {
+            top: 0;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Thanh điều hướng -->
+    <nav class="bg-white shadow-md py-4 fixed w-full z-10">
+        <div class="container mx-auto flex justify-between items-center px-6">
+            <a href="/" class="flex items-center space-x-2">
+                <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12">
+                <span class="text-xl font-semibold text-gray-800 hover:text-red-600">MotoHub</span>
+            </a>
+            <div class="flex space-x-6 items-center">
+                <a href="/" class="text-gray-600 hover:text-red-600 text-lg">Trang chủ</a>
+                <a href="/search" class="text-gray-600 hover:text-red-600 text-lg">Tìm kiếm</a>
+                {% if not user %}
+                    <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Đăng nhập</a>
+                {% else %}
+                    <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Trang chính</a>
+                    <a href="/api/auth/logout" class="text-gray-600 hover:text-red-600 text-lg" onclick="dangXuat(event)">Đăng xuất</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Phần giới thiệu -->
+    <section class="hero-bg mt-16" id="hero">
+        <div class="hero-overlay"></div>
+        <div class="container mx-auto text-center py-20 text-white relative z-10">
+            <div class="fade-in">
+                <h1 class="text-5xl font-bold mb-4">Trung tâm dịch vụ, chia sẻ và kết nối dành cho tín đồ xe máy</h1>
+                <div class="space-x-4 mt-6">
+                    <a href="#" class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700" onclick="scrollToSection('services')">Khám phá ngay</a>
+                    <a href="http://127.0.0.1:8000/maintenance" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">Đặt lịch sửa xe</a>
+                    <a href="/community" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700">Tham gia cộng đồng</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Các dịch vụ chính -->
+    <section class="py-20 bg-white" id="services">
+        <div class="container mx-auto">
+            <h2 class="text-3xl font-semibold text-red-600 text-center mb-12">Các dịch vụ chính</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+                <div class="service-card bg-gray-100 p-6 rounded-lg text-center shadow-lg">
+                    <svg class="w-12 h-12 mx-auto mb-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                    </svg>
+                    <h3 class="text-xl font-medium">Đặt lịch bảo dưỡng xe</h3>
+                    <p class="text-gray-600 mt-2">Dịch vụ đặt lịch bảo dưỡng xe máy dễ dàng và tiện lợi.</p>
+                </div>
+                <div class="service-card bg-gray-100 p-6 rounded-lg text-center shadow-lg">
+                    <svg class="w-12 h-12 mx-auto mb-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                    </svg>
+                    <h3 class="text-xl font-medium">Cộng đồng nơi chia sẻ kiến thức</h3>
+                    <p class="text-gray-600 mt-2">Nơi giao lưu và chia sẻ kiến thức về xe máy.</p>
+                </div>
+                <div class="service-card bg-gray-100 p-6 rounded-lg text-center shadow-lg">
+                    <svg class="w-12 h-12 mx-auto mb-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                    </svg>
+                    <h3 class="text-xl font-medium">Đăng ký premium cho tùy chỉnh 3D</h3>
+                    <p class="text-gray-600 mt-2">Tùy chỉnh 3D xe máy của bạn (tính năng đang cập nhật).</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Featured Articles -->
+    <section class="py-20 bg-gray-50">
+        <div class="container mx-auto">
+            <h2 class="text-3xl font-semibold text-red-600 text-center mb-12">Các tin tức liên quan</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <a href="https://www.ssdecal.vn/quy-trinh-bao-duong-xe-may/" target="_blank">
+                        <img src="/static/QTBD.jpg" alt="Quy trình bảo dưỡng xe máy" class="w-full h-48 object-cover rounded-t-lg">
+                        <h3 class="text-xl font-medium mt-4">Quy trình bảo dưỡng xe máy</h3>
+                        <p class="text-gray-600 mt-2">Hướng dẫn chi tiết quy trình bảo dưỡng để xe luôn bền bỉ.</p>
+                    </a>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <a href="https://motorvina.com/vi/travel-inspiration/detail/top-5-motorbike-tours-in-vietnam-for-foreign-travelers" target="_blank">
+                        <img src="/static/Top5conduong.jpg" alt="Top 5 cung đường phượt xe máy" class="w-full h-48 object-cover rounded-t-lg">
+                        <h3 class="text-xl font-medium mt-4">Top 5 cung đường phượt xe máy</h3>
+                        <p class="text-gray-600 mt-2">Khám phá 5 tuyến đường đẹp nhất Việt Nam cho tín đồ phượt.</p>
+                    </a>
+                </div>
+            </div>
+            <div class="text-center mt-8">
+                <a href="/blog" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700">Xem thêm</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Us Preview -->
+    <section class="py-20 bg-gradient-to-r from-gray-100 to-red-50">
+        <div class="container mx-auto text-center">
+            <h2 class="text-4xl font-bold text-red-600 mb-6 border-b-4 border-red-600 inline-block pb-2">Về chúng tôi</h2>
+            <p class="text-gray-800 text-lg max-w-3xl mx-auto leading-relaxed">
+                MotoHub ra đời với sứ mệnh trở thành trung tâm kết nối đam mê xe máy, nơi mọi tín đồ có thể tìm thấy giải pháp toàn diện từ bảo trì, bảo dưỡng, đến chia sẻ kiến thức lái xe an toàn. Chúng tôi không chỉ cung cấp các dịch vụ chuyên nghiệp như đặt lịch sửa chữa dễ dàng hay tùy chỉnh xe 3D độc đáo (tính năng đang phát triển), mà còn xây dựng một cộng đồng sôi động để giao lưu và học hỏi. Với đội ngũ nhiệt huyết và cam kết mang lại trải nghiệm tốt nhất, MotoHub hướng tới việc nâng tầm văn hóa xe máy tại Việt Nam, từ những cung đường phượt huyền thoại đến việc chăm sóc từng "chiến mã" của bạn.
+            </p>
+            <div class="mt-8 flex justify-center space-x-4">
+                <a href="/about" class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition duration-300">Tìm hiểu thêm</a>
+                <a href="https://www.facebook.com/profile.php?id=61576891661221" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300" target="_blank">Liên hệ ngay</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="py-20 bg-gray-50">
+        <div class="container mx-auto text-center">
+            <h2 class="text-3xl font-semibold text-red-600 mb-6">Cảm nhận từ người dùng</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <p class="text-gray-600 italic">"Tôi đã tìm được thợ sửa xe uy tín nhờ MotoHub!"</p>
+                    <p class="text-right mt-2 text-gray-800 font-medium">— Anh Tâm, Gò Vấp</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <p class="text-gray-600 italic">"Cộng đồng rất tuyệt, nhiều kiến thức hữu ích!"</p>
+                    <p class="text-right mt-2 text-gray-800 font-medium">— Chị Lan, Tân Bình</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Thành phần bổ sung -->
+    <section class="py-20 bg-gray-100">
+        <div class="container mx-auto text-center">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Tìm kiếm nhanh -->
+                <div class="bg-gray-200 p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-medium mb-4">Tìm kiếm nhanh</h3>
+                    <input type="text" placeholder="Tìm tiệm sửa xe gần bạn..." class="w-full p-2 border rounded">
+                    <button class="mt-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Tìm</button>
+                </div>
+                <!-- Số thành viên -->
+                <div class="bg-gray-200 p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-medium mb-4">Thành viên</h3>
+                    <p class="text-2xl text-gray-800">Đã có 100 người tham gia!</p>
+                </div>
+                <!-- Đăng ký bản tin -->
+                <div class="bg-gray-200 p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-medium mb-4">Đăng ký bản tin</h3>
+                    <form class="flex">
+                        <input type="email" placeholder="Nhập email của bạn..." class="w-full p-2 border rounded-l">
+                        <button type="submit" class="bg-red-600 text-white p-2 rounded-r hover:bg-red-700">Đăng ký</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chân trang -->
+    <footer class="bg-gray-800 text-white py-8">
+        <div class="container mx-auto text-center">
+            <div class="mb-4">
+                <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12 mx-auto mb-4">
+                <p class="text-sm">Tài nguyên | Miễn phí | Podcast YouTube</p>
+            </div>
+            <div class="mb-4">
+                <p><strong>Liên hệ:</strong> 0909 123 456 | ho tro@motohub.com</p>
+                <p><strong>Địa chỉ:</strong> 123 Đường Lê Lợi, Quận 1, TP.HCM</p>
+            </div>
+            <div class="space-x-4 mb-4">
+                <a href="https://www.facebook.com/profile.php?id=61576891661221" class="text-gray-400 hover:text-white" target="_blank">Facebook</a>
+                <a href="#" class="text-gray-400 hover:text-white">YouTube</a>
+                <a href="#" class="text-gray-400 hover:text-white">Zalo</a>
+            </div>
+            <div class="text-sm">
+                <a href="/privacy" class="text-gray-400 hover:text-white mr-2">Chính sách bảo mật</a>
+                <a href="/terms" class="text-gray-400 hover:text-white">Điều khoản sử dụng</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function dangXuat(event) {
+            event.preventDefault();
+            fetch('/api/auth/logout', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                })
+                .catch(error => console.error('Lỗi đăng xuất:', error));
+        }
+
+        function scrollToSection(sectionId) {
+            document.getElementById(sectionId).scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>

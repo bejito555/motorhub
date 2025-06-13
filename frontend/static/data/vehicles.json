@@ -1,0 +1,66 @@
+[
+  {
+    "id": 1,
+    "name": "Honda SH350i",
+    "type": "Xe ga",
+    "engine": "350cc",
+    "price": "151.190.000 VND",
+    "image": "sh350i.jpg"
+  },
+  {
+    "id": 2,
+    "name": "Honda SH160i/125i",
+    "type": "Xe ga",
+    "engine": "160cc / 125cc",
+    "price": "73.921.091 VND",
+    "image": "sh160i-125i.jpg"
+  },
+  {
+    "id": 3,
+    "name": "Honda SH Mode 125",
+    "type": "Xe ga",
+    "engine": "125cc",
+    "price": "57.132.000 VND",
+    "image": "sh-mode-125.jpg"
+  },
+  {
+    "id": 4,
+    "name": "Honda Vario 160",
+    "type": "Xe ga",
+    "engine": "160cc",
+    "price": "51.990.000 VND",
+    "image": "vario-160.jpg"
+  },
+  {
+    "id": 5,
+    "name": "Honda Air Blade 160/125",
+    "type": "Xe ga",
+    "engine": "160cc / 125cc",
+    "price": "42.012.000 VND",
+    "image": "air-blade.jpg"
+  },
+  {
+    "id": 6,
+    "name": "Honda Vario 125",
+    "type": "Xe ga",
+    "engine": "125cc",
+    "price": "40.735.637 VND",
+    "image": "vario-125.jpg"
+  },
+  {
+    "id": 7,
+    "name": "Honda LEAD ABS",
+    "type": "Xe ga",
+    "engine": "125cc",
+    "price": "39.557.455 VND",
+    "image": "lead-abs.jpg"
+  },
+  {
+    "id": 8,
+    "name": "Honda Vision",
+    "type": "Xe ga",
+    "engine": "110cc",
+    "price": "31.310.182 VND",
+    "image": "vision.jpg"
+  }
+]

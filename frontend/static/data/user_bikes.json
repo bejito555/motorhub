@@ -1,0 +1,17 @@
+[
+    {
+        "user_id": 1,
+        "bike_model": "Honda Vision",
+        "image": "vision.jpg"
+    },
+    {
+        "user_id": 1,
+        "bike_model": "Honda SH350i",
+        "image": "sh350i.jpg"
+    },
+    {
+        "user_id": 1,
+        "bike_model": "Honda SH350i",
+        "image": "sh350i.jpg"
+    }
+]

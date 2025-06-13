@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moto50Hub Verify Email</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-white min-h-screen flex items-center justify-center">
+    <div class="flex w-full max-w-4xl h-[80vh] overflow-hidden rounded-lg shadow-lg">
+        <!-- Left Side: Only Logo with White Background -->
+        <div class="relative w-1/2 bg-white flex items-center justify-center">
+            <div class="relative z-10 text-center">
+                <img src="/static/motorhub-1.png" alt="Moto50Hub Logo" class="mx-auto h-48">
+            </div>
+        </div>
+        <!-- Right Side: Verify Email Form -->
+        <div class="w-1/2 bg-white p-10 flex flex-col justify-center">
+            <h2 class="text-2xl font-semibold text-center mb-6">Xác minh Email</h2>
+            <p class="text-center text-gray-600 mb-4">Vui lòng nhập mã OTP được gửi đến {{ email or 'email của bạn' }}</p>
+            <form id="verifyForm" class="space-y-4">
+                <div>
+                    <label for="otp" class="block text-gray-700">Mã OTP</label>
+                    <input type="text" id="otp" name="otp" class="w-full p-2 border rounded" placeholder="Nhập mã OTP (6 chữ số)" required pattern="\d{6}">
+                    <input type="hidden" id="email" name="email" value="{{ email or '' }}">
+                </div>
+                <button type="submit" class="w-full bg-red-600 text-white p-2 rounded hover:bg-red-700">Xác minh</button>
+            </form>
+            <p class="text-center mt-4 text-gray-600">
+                Chưa nhận được mã? <a href="#" id="resendOtp" class="text-red-600 hover:underline">Gửi lại mã</a>
+            </p>
+            <p id="message" class="text-center mt-2 text-red-600"></p>
+        </div>
+    </div>
+    <script>
+        document.getElementById('verifyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const otp = document.getElementById('otp').value;
+            const message = document.getElementById('message');
+
+            try {
+                const response = await fetch('/api/auth/register/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, otp })
+                });
+                console.log('Verify response status:', response.status);
+                const data = await response.json();
+                console.log('Verify response data:', data);
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    message.textContent = 'Xác minh thành công! Đang chuyển hướng...';
+                    setTimeout(() => window.location.href = '/', 2000);
+                } else {
+                    message.textContent = data.detail || 'Xác minh thất bại';
+                }
+            } catch (error) {
+                console.error('Lỗi xác minh:', error);
+                message.textContent = 'Lỗi kết nối server: ' + error.message;
+            }
+        });
+
+        document.getElementById('resendOtp').addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const message = document.getElementById('message');
+
+            try {
+                const response = await fetch('/api/auth/register/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    message.textContent = 'Mã OTP mới đã được gửi đến email của bạn!';
+                } else {
+                    message.textContent = data.detail || 'Gửi lại OTP thất bại';
+                }
+            } catch (error) {
+                console.error('Lỗi gửi lại OTP:', error);
+                message.textContent = 'Lỗi kết nối server: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>
