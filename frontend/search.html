@@ -137,7 +137,7 @@
                             <h3 class="text-xl font-medium">${vehicle.name || 'Không có dữ liệu'}</h3>
                             <p class="text-base text-gray-600">Loại: ${vehicle.type || 'Không có dữ liệu'}</p>
                             <p class="text-base text-gray-600">Động cơ: ${vehicle.engine || 'Không có dữ liệu'}</p>
-                            <p class="text-base text-gray-600">Giá: ${vehicle.price || 'Không có dữ liệu'}</p>
+                            <p class="text-base text-gray-600">Giá: ${vehicle.price || 'Không có dữ liệu' || 'Chưa có giá'}</p>
                             <button class="mt-2 bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700" onclick="selectBike(${vehicle.id || 0})">Chọn xe</button>
                         </div>
                         <div class="bike-image">
@@ -174,7 +174,7 @@
                                 <h3 class="text-xl font-medium">${vehicle.name || 'Không có dữ liệu'}</h3>
                                 <p class="text-base text-gray-600">Loại: ${vehicle.type || 'Không có dữ liệu'}</p>
                                 <p class="text-base text-gray-600">Động cơ: ${vehicle.engine || 'Không có dữ liệu'}</p>
-                                <p class="text-base text-gray-600">Giá: ${vehicle.price || 'Không có dữ liệu'}</p>
+                                <p class="text-base text-gray-600">Giá: ${vehicle.price || 'Không có dữ liệu' || 'Chưa có giá'}</p>
                                 <button class="mt-2 bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700" onclick="selectBike(${vehicle.id || 0})">Chọn xe</button>
                             </div>
                             <div class="bike-image">
@@ -193,6 +193,7 @@
             const userId = JSON.parse('{{ user.id|default("null")|tojson|safe }}');
             if (userId === null) {
                 alert("Vui lòng đăng nhập để chọn xe!");
+                window.location.href = '/login';
                 return;
             }
             try {
