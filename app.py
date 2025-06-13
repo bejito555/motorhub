@@ -17,7 +17,8 @@ from dotenv import load_dotenv
 from google.oauth2 import id_token
 from google.auth.transport import requests
 import json
-
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent
 # Load biến môi trường
 load_dotenv()
 
@@ -26,8 +27,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="E:/Ky 8/exe/mvp_50cc/frontend/static"), name="static")
-templates = Jinja2Templates(directory="E:/Ky 8/exe/mvp_50cc/frontend")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "frontend" / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "frontend")
+
 
 # Hash mật khẩu
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
