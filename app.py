@@ -47,12 +47,13 @@ def get_db():
         logger.error(f"Lỗi kết nối database: {e}")
         raise HTTPException(status_code=500, detail="Kết nối database thất bại")
 
-# Khởi tạo database
 def init_db():
     try:
         with get_db() as conn:
-            # Kiểm tra và tạo bảng nếu chưa tồn tại
-            conn.execute("""
+            cursor = conn.cursor()
+
+            # Tạo bảng users
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     fullName TEXT NOT NULL,
@@ -61,18 +62,19 @@ def init_db():
                     last_maintenance_date TEXT
                 )
             """)
-            # Kiểm tra và thêm cột mobile nếu chưa tồn tại
+            # Thêm cột mobile nếu chưa có
             try:
-                conn.execute("SELECT mobile FROM users LIMIT 1")
+                cursor.execute("SELECT mobile FROM users LIMIT 1")
             except sqlite3.OperationalError:
-                conn.execute("ALTER TABLE users ADD COLUMN mobile TEXT")
-            # Kiểm tra và thêm cột location nếu chưa tồn tại
+                cursor.execute("ALTER TABLE users ADD COLUMN mobile TEXT")
+            # Thêm cột location nếu chưa có
             try:
-                conn.execute("SELECT location FROM users LIMIT 1")
+                cursor.execute("SELECT location FROM users LIMIT 1")
             except sqlite3.OperationalError:
-                conn.execute("ALTER TABLE users ADD COLUMN location TEXT")
-            # Tạo bảng otp_verifications
-            conn.execute("""
+                cursor.execute("ALTER TABLE users ADD COLUMN location TEXT")
+
+            # Bảng xác thực OTP
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS otp_verifications (
                     email TEXT PRIMARY KEY,
                     fullName TEXT NOT NULL,
@@ -81,29 +83,32 @@ def init_db():
                     expires_at DATETIME NOT NULL
                 )
             """)
+
+            # ✅ Thêm bảng cộng đồng tại đây
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS community_posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS community_comments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    post_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             conn.commit()
     except sqlite3.Error as e:
         logger.error(f"Lỗi khởi tạo database: {e}")
         raise HTTPException(status_code=500, detail="Khởi tạo database thất bại")
-init_db()
-conn.execute("""
-    CREATE TABLE IF NOT EXISTS community_posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-""")
-conn.execute("""
-    CREATE TABLE IF NOT EXISTS community_comments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        post_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL,
-        content TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-""")
+
 
 
 # Pydantic models
