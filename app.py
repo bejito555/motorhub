@@ -110,6 +110,7 @@ def init_db():
         raise HTTPException(status_code=500, detail="Khởi tạo database thất bại")
 
 
+init_db()
 
 # Pydantic models
 class UserCreate(BaseModel):
