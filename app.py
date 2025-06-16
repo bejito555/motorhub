@@ -86,6 +86,25 @@ def init_db():
         logger.error(f"Lỗi khởi tạo database: {e}")
         raise HTTPException(status_code=500, detail="Khởi tạo database thất bại")
 init_db()
+conn.execute("""
+    CREATE TABLE IF NOT EXISTS community_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+conn.execute("""
+    CREATE TABLE IF NOT EXISTS community_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+
 
 # Pydantic models
 class UserCreate(BaseModel):
@@ -144,6 +163,57 @@ class ResetPassword(BaseModel):
     old_password: str
     new_password: str
     confirm_password: str
+
+class PostCreate(BaseModel):
+    title: str
+    content: str
+
+class CommentCreate(BaseModel):
+    post_id: int
+    content: str
+
+#community
+@app.post("/api/community/post")
+async def create_post(post: PostCreate, user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Chưa đăng nhập")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO community_posts (user_id, title, content) VALUES (?, ?, ?)",
+                       (user["id"], post.title, post.content))
+        conn.commit()
+    return {"message": "Đăng bài thành công"}
+@app.post("/api/community/comment")
+async def add_comment(comment: CommentCreate, user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Chưa đăng nhập")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO community_comments (post_id, user_id, content) VALUES (?, ?, ?)",
+                       (comment.post_id, user["id"], comment.content))
+        conn.commit()
+    return {"message": "Bình luận thành công"}
+@app.get("/api/community/posts")
+async def get_posts():
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT p.id, p.title, p.content, p.created_at, u.fullName AS author 
+            FROM community_posts p
+            JOIN users u ON p.user_id = u.id
+            ORDER BY p.created_at DESC
+        """)
+        posts = [dict(row) for row in cursor.fetchall()]
+        for post in posts:
+            cursor.execute("""
+                SELECT c.content, c.created_at, u.fullName AS commenter 
+                FROM community_comments c
+                JOIN users u ON c.user_id = u.id
+                WHERE c.post_id = ?
+                ORDER BY c.created_at ASC
+            """, (post["id"],))
+            post["comments"] = [dict(c) for c in cursor.fetchall()]
+        return {"posts": posts}
 
 # Cấu hình JWT và SMTP
 SECRET_KEY = os.getenv("SECRET_KEY", "your_secure_random_secret_key")
