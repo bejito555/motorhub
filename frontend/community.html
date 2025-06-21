@@ -16,7 +16,7 @@
             <div class="space-x-6">
                 <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Dashboard</a>
                 {% if user %}
-                    <a href="/api/auth/logout" class="text-gray-600 hover:text-red-600 text-lg" onclick="logout(event)">Log out</a>
+                    <a href="#" class="text-gray-600 hover:text-red-600 text-lg" onclick="logout(event)">Log out</a>
                 {% else %}
                     <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Sign in</a>
                 {% endif %}
@@ -27,17 +27,17 @@
     <div class="pt-20 pb-12">
         <div class="container mx-auto p-6">
             <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Community</h1>
+
             <!-- Form đăng bài -->
-<div class="bg-white p-4 rounded shadow mb-6">
-    <h2 class="text-xl font-bold mb-2">Đăng bài mới</h2>
-    <input id="post-title" type="text" placeholder="Tiêu đề..." class="w-full border p-2 mb-2">
-    <textarea id="post-content" rows="4" placeholder="Nội dung..." class="w-full border p-2 mb-2"></textarea>
-    <button onclick="submitPost()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">Gửi</button>
-</div>
+            <div class="bg-white p-4 rounded shadow mb-6">
+                <h2 class="text-xl font-bold mb-2">Đăng bài mới</h2>
+                <input id="post-title" type="text" placeholder="Tiêu đề..." class="w-full border p-2 mb-2 rounded">
+                <textarea id="post-content" rows="4" placeholder="Nội dung..." class="w-full border p-2 mb-2 rounded"></textarea>
+                <button onclick="submitPost()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">Gửi</button>
+            </div>
 
-<!-- Danh sách bài viết -->
-<div id="posts" class="space-y-6"></div>
-
+            <!-- Danh sách bài viết -->
+            <div id="posts" class="space-y-6"></div>
         </div>
     </div>
 
@@ -68,72 +68,78 @@
             event.preventDefault();
             fetch('/api/auth/logout', { method: 'POST' })
                 .then(response => response.json())
-                .then(data => {
+                .then(() => {
                     localStorage.removeItem('token');
                     window.location.href = '/';
                 })
                 .catch(error => console.error('Logout error:', error));
         }
+
+        async function loadPosts() {
+            const res = await fetch('/api/community/posts');
+            const data = await res.json();
+            const postsContainer = document.getElementById('posts');
+            postsContainer.innerHTML = '';
+
+            data.posts.forEach(post => {
+                const commentsHTML = post.comments.map(c =>
+                    `<div class="ml-4 text-sm text-gray-700">💬 <strong>${c.commenter}:</strong> ${c.content}</div>`
+                ).join('');
+
+                const postHTML = `
+                    <div class="bg-white p-4 rounded shadow">
+                        <div class="mb-2">
+                            <h3 class="text-lg font-bold">${post.title}</h3>
+                            <p class="text-gray-700 mb-1">${post.content}</p>
+                            <p class="text-sm text-gray-500">🧑 ${post.author} - ${new Date(post.created_at).toLocaleString()}</p>
+                        </div>
+                        <div>${commentsHTML}</div>
+                        <div class="mt-2">
+                            <input type="text" placeholder="Viết bình luận..." class="border p-1 w-3/4 rounded" id="comment-${post.id}">
+                            <button onclick="submitComment(${post.id})" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-sm rounded">Gửi</button>
+                        </div>
+                    </div>`;
+                postsContainer.innerHTML += postHTML;
+            });
+        }
+
+        async function submitPost() {
+            const title = document.getElementById('post-title').value;
+            const content = document.getElementById('post-content').value;
+            const res = await fetch('/api/community/post', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, content })
+            });
+            if (res.ok) {
+                loadPosts();
+                document.getElementById('post-title').value = '';
+                document.getElementById('post-content').value = '';
+            } else {
+                const err = await res.json();
+                alert("Lỗi khi đăng bài: " + (err.detail || "Chưa đăng nhập"));
+            }
+        }
+
+        async function submitComment(postId) {
+            const input = document.getElementById(`comment-${postId}`);
+            const content = input.value;
+            const res = await fetch('/api/community/comment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ post_id: postId, content })
+            });
+            if (res.ok) {
+                input.value = '';
+                input.focus();
+                loadPosts();
+            } else {
+                const err = await res.json();
+                alert("Lỗi bình luận: " + (err.detail || "Chưa đăng nhập"));
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadPosts);
     </script>
-    <script>
-async function loadPosts() {
-    const res = await fetch('/api/community/posts');
-    const data = await res.json();
-    const postsContainer = document.getElementById('posts');
-    postsContainer.innerHTML = '';
-
-    data.posts.forEach(post => {
-        const commentsHTML = post.comments.map(c =>
-            `<div class="ml-4 text-sm text-gray-700">💬 <strong>${c.commenter}:</strong> ${c.content}</div>`
-        ).join('');
-
-        const postHTML = `
-            <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-bold">${post.title}</h3>
-                <p class="text-gray-700 mb-2">${post.content}</p>
-                <p class="text-sm text-gray-500">🧑 ${post.author} - ${new Date(post.created_at).toLocaleString()}</p>
-                <div>${commentsHTML}</div>
-                <div class="mt-2">
-                    <input type="text" placeholder="Viết bình luận..." class="border p-1 w-3/4" id="comment-${post.id}">
-                    <button onclick="submitComment(${post.id})" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-sm rounded">Gửi</button>
-                </div>
-            </div>`;
-        postsContainer.innerHTML += postHTML;
-    });
-}
-
-async function submitPost() {
-    const title = document.getElementById('post-title').value;
-    const content = document.getElementById('post-content').value;
-    const res = await fetch('/api/community/post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content })
-    });
-    if (res.ok) {
-        loadPosts();
-        document.getElementById('post-title').value = '';
-        document.getElementById('post-content').value = '';
-    } else {
-        alert("Lỗi khi đăng bài. Đăng nhập?");
-    }
-}
-
-async function submitComment(postId) {
-    const content = document.getElementById(`comment-${postId}`).value;
-    const res = await fetch('/api/community/comment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ post_id: postId, content })
-    });
-    if (res.ok) {
-        loadPosts();
-    } else {
-        alert("Lỗi khi gửi bình luận.");
-    }
-}
-
-document.addEventListener('DOMContentLoaded', loadPosts);
-</script>
 </body>
 </html>
