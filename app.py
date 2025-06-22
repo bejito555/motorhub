@@ -177,7 +177,27 @@ class PostCreate(BaseModel):
 class CommentCreate(BaseModel):
     post_id: int
     content: str
-
+async def get_current_user(request: Request):
+    token = request.cookies.get("access_token")
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = payload.get("sub")
+            if not user_id or not user_id.isdigit():
+                logger.warning("Invalid user_id in token")
+                return None
+            with get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, fullName, email, password, last_maintenance_date, mobile, location FROM users WHERE id = ?", (int(user_id),))
+                user = cursor.fetchone()
+                if user is None:
+                    logger.warning(f"No user found with id: {user_id}")
+                    return None
+                return user
+        except JWTError as e:
+            logger.warning(f"JWT error: {e}")
+            return None
+    return None
 #community
 @app.post("/api/community/post")
 async def create_post(post: PostCreate, user: Optional[sqlite3.Row] = Depends(get_current_user)):
@@ -269,28 +289,6 @@ def check_maintenance_due(last_date):
     last_date = datetime.strptime(last_date, "%Y-%m-%d")
     due_date = last_date + timedelta(days=30)
     return "Cần bảo trì!" if datetime.utcnow() > due_date else "Bảo trì ổn định"
-
-async def get_current_user(request: Request):
-    token = request.cookies.get("access_token")
-    if token:
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            user_id = payload.get("sub")
-            if not user_id or not user_id.isdigit():
-                logger.warning("Invalid user_id in token")
-                return None
-            with get_db() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, fullName, email, password, last_maintenance_date, mobile, location FROM users WHERE id = ?", (int(user_id),))
-                user = cursor.fetchone()
-                if user is None:
-                    logger.warning(f"No user found with id: {user_id}")
-                    return None
-                return user
-        except JWTError as e:
-            logger.warning(f"JWT error: {e}")
-            return None
-    return None
 
 # API routes
 @app.post("/api/auth/register/request")
