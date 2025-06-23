@@ -412,10 +412,9 @@ function scrollToMaintenance() {
     }
 }
 </script>
-
-        // Event listener for edit button
+<script>       
         document.getElementById('editButton').addEventListener('click', toggleEdit);
-    </script>
+</script>
     {% if user %}
         <input type="hidden" name="user_id" value="{{ user.id }}">
     {% endif %}
