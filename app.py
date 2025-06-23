@@ -677,7 +677,12 @@ async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends
 async def profile_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
     if not user:
         return RedirectResponse(url="/login")
-    return templates.TemplateResponse("profile.html", {"request": request, "user": user})
+    history = await get_maintenance_history(user["id"])
+    return templates.TemplateResponse("profile.html", {
+        "request": request,
+        "user": user,
+        "history": history["history"]
+    })
 
 @app.get("/maintenance", response_class=HTMLResponse)
 async def maintenance_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
