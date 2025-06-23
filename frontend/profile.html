@@ -379,6 +379,20 @@
                 spinner.style.display = 'none';
             }
         }
+<div class="mt-10">
+    <h3 class="text-xl font-semibold text-gray-900 mb-2">Lịch sử đặt lịch bảo trì</h3>
+    {% if history %}
+        <ul class="space-y-2">
+            {% for booking in history %}
+                <li class="bg-gray-50 p-4 rounded shadow-sm border border-gray-200">
+                    📅 <strong>{{ booking.date }}</strong> — 🚘 <em>{{ booking.bike_model }}</em>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="text-gray-500 text-sm">Bạn chưa từng đặt lịch bảo trì nào.</p>
+    {% endif %}
+</div>
 
         // Toast notification
         function showToast(message, type = 'success') {
