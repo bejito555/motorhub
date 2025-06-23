@@ -544,23 +544,29 @@ async def book_maintenance(booking: MaintenanceBooking):
     return {"message": "Lịch bảo dưỡng đã được đặt thành công"}
 
 @app.post("/api/update_profile")
-async def update_profile(user_update: UpdateUser, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Token không hợp lệ hoặc thiếu")
-    user_id = current_user["id"]
-    fullName = user_update.fullName
-    email = user_update.email
-    password = user_update.password
-    mobile = user_update.mobile
-    location = user_update.location
+async def update_profile(data: dict, user: dict = Depends(get_current_user)):
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE users SET fullName = ?, email = ?, password = ?, mobile = ?, location = ? WHERE id = ?",
-            (fullName, email, get_password_hash(password) if password else current_user["password"], mobile or current_user["mobile"], location or current_user["location"], user_id)
-        )
-        conn.commit()
-    return {"message": f"Đã cập nhật thông tin cho user {user_id}"}
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET full_name = %s,
+                    email = %s,
+                    mobile = %s,
+                    location = %s
+                WHERE id = %s
+                """,
+                (
+                    data.get("fullName", user["full_name"]),
+                    data.get("email", user["email"]),
+                    data.get("mobile", user.get("mobile")),
+                    data.get("location", user.get("location")),
+                    user["id"]
+                )
+            )
+            conn.commit()
+    return {"message": "Cập nhật thông tin thành công!"}
+
 
 @app.post("/api/reset_password")
 async def reset_password(reset: ResetPassword):
