@@ -415,6 +415,12 @@ function scrollToMaintenance() {
 <script>       
         document.getElementById('editButton').addEventListener('click', toggleEdit);
 </script>
+<h3>Lịch sử bảo dưỡng</h3>
+<ul>
+  {% for item in history %}
+    <li>Ngày: {{ item.date }} | Xe: {{ item.bike_model }}</li>
+  {% endfor %}
+</ul>
     {% if user %}
         <input type="hidden" name="user_id" value="{{ user.id }}">
     {% endif %}
