@@ -26,7 +26,7 @@
         .container-wrapper {
             display: flex;
             flex: 1;
-            margin-top: 80px; /* Chiều cao navbar */
+            margin-top: 80px;
         }
         .sidebar {
             width: 260px;
@@ -51,7 +51,7 @@
             padding: 2rem;
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
             max-width: 600px;
-            margin: 0 auto; /* Căn giữa content */
+            margin: 0 auto;
         }
         .info-item label {
             font-weight: 600;
@@ -115,6 +115,13 @@
         .modal.active {
             display: block;
             opacity: 1;
+        }
+        .modal-content {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            margin: 15% auto;
         }
         .notification {
             display: none;
@@ -194,19 +201,19 @@
                     </div>
                 </div>
                 <div class="space-y-2">
-                    <a href="#" id="profileLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg active">
+                    <a href="/profile" id="profileLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg active">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                         <span>Hồ sơ</span>
                     </a>
-                    <a href="#" id="passwordLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg">
+                    <a href="/profile#password" id="passwordLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0-1.104-.896-2-2-2s-2 .896-2 2v1H7v4h10v-4h-1v-1c0-1.104-.896-2-2-2s-2 .896-2 2m5 1h-2v-1c0-1.656 1.344-3 3-3s3 1.344 3 3v1h-2v4H5v-4h2v-1c0-1.656 1.344-3 3-3s3 1.344 3 3v1z" />
                         </svg>
                         <span>Đổi mật khẩu hiện tại</span>
                     </a>
-                    <a href="#" id="maintenanceLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg">
+                    <a href="/profile#maintenance" id="maintenanceLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
@@ -282,6 +289,33 @@
                             <!-- Populated by JavaScript -->
                         </div>
                     </div>
+
+                    <!-- Edit Booking Modal -->
+                    <div id="editModal" class="modal">
+                        <div class="modal-content">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4">Chỉnh sửa lịch đặt xe</h2>
+                            <form id="editForm" class="space-y-4">
+                                <div class="info-item">
+                                    <label for="editDateTime" class="block text-sm font-medium text-gray-700">Ngày và giờ</label>
+                                    <input type="datetime-local" id="editDateTime" name="editDateTime" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" required>
+                                </div>
+                                <div class="info-item">
+                                    <label for="editBikeModel" class="block text-sm font-medium text-gray-700">Xe</label>
+                                    <input type="text" id="editBikeModel" name="editBikeModel" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" required>
+                                </div>
+                                <div class="info-item">
+                                    <label for="editLocation" class="block text-sm font-medium text-gray-700">Địa điểm</label>
+                                    <input type="text" id="editLocation" name="editLocation" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" required>
+                                </div>
+                                <input type="hidden" id="editBookingId" name="editBookingId">
+                                <div id="bookingNotification" class="notification"></div>
+                                <div class="flex space-x-4">
+                                    <button type="submit" class="flex-1 bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600">Lưu</button>
+                                    <button type="button" class="flex-1 bg-gray-500 text-white py-2 rounded-md hover:bg-gray-600" onclick="closeModal()">Hủy</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             {% else %}
                 <div class="text-center">
@@ -308,6 +342,16 @@
                     console.error('Logout error:', error);
                     showToast('Đăng xuất thất bại.', 'error');
                 });
+        }
+
+        // Toast notification
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
         }
 
         // Tab switching
@@ -371,7 +415,7 @@
             maintenanceList.innerHTML = '<div class="spinner mx-auto"></div>';
             try {
                 const response = await fetch('/api/maintenance_history?user_id={{ user.id }}');
-                if (!response.ok) throw new Error('Failed to fetch maintenance history');
+                if (!response.ok) throw new Error('Không thể tải lịch sử bảo dưỡng');
                 const data = await response.json();
                 console.log('Maintenance data:', data);
                 maintenanceList.innerHTML = '';
@@ -379,14 +423,14 @@
                     maintenanceList.innerHTML = '<p class="text-gray-600">Chưa có lịch đặt xe.</p>';
                     return;
                 }
-                data.history.forEach((booking, index) => {
+                data.history.forEach((booking) => {
                     const bookingDiv = document.createElement('div');
                     bookingDiv.className = 'border border-gray-200 rounded-md p-4';
                     const now = new Date();
                     const [datePart] = booking.date.split('T');
                     const bookingDateTime = new Date(`${datePart}T${booking.time || '08:00'}`);
                     const fiveHoursFromNow = new Date(now.getTime() + 5 * 60 * 60 * 1000);
-                    const timeLeft = Math.max(0, (fiveHoursFromNow - now) / (1000 * 60)); // Phút còn lại
+                    const timeLeft = Math.max(0, (fiveHoursFromNow - now) / (1000 * 60)); // Minutes remaining
 
                     let notification = '';
                     let paymentStatusClass = booking.payment_status === 'paid' ? 'paid' : 'unpaid';
@@ -397,7 +441,7 @@
                         notification = `<div class="notification warning">Vui lòng thanh toán trong vòng ${Math.ceil(timeLeft)} phút</div>`;
                     }
 
-                    const baseAmount = 20000; // 20,000 VND mỗi lượt đặt lịch
+                    const baseAmount = booking.amount || 20000;
 
                     bookingDiv.innerHTML = `
                         <p class="text-sm text-gray-700"><strong>Ngày và giờ:</strong> ${booking.date} ${booking.time || '(08:00)'}</p>
@@ -407,16 +451,16 @@
                         <p class="text-sm text-gray-700"><strong>Số tiền:</strong> ${baseAmount.toLocaleString()} VND</p>
                         ${notification}
                         <div class="flex space-x-2 mt-2">
-                            <button class="inline-block bg-blue-500 text-white py-1 px-3 rounded-md hover:bg-blue-600 ${booking.payment_status === 'paid' ? 'disabled' : ''}" onclick="initiatePayment(${index})" ${booking.payment_status === 'paid' ? 'disabled' : ''}>Thanh toán</button>
-                            <button class="inline-block bg-yellow-500 text-white py-1 px-3 rounded-md hover:bg-yellow-600" onclick="editBooking(${index}, '${booking.date}T${booking.time || '08:00'}', '${booking.bike_model}', '${booking.location}')">Chỉnh sửa</button>
-                            <button class="inline-block bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600" onclick="deleteBooking(${index})">Xóa</button>
+                            <button class="inline-block bg-blue-500 text-white py-1 px-3 rounded-md hover:bg-blue-600 ${booking.payment_status === 'paid' ? 'disabled opacity-50 cursor-not-allowed' : ''}" onclick="initiatePayment(${booking.id})" ${booking.payment_status === 'paid' ? 'disabled' : ''}>Thanh toán</button>
+                            <button class="inline-block bg-yellow-500 text-white py-1 px-3 rounded-md hover:bg-yellow-600" onclick="editBooking(${booking.id}, '${booking.date}T${booking.time || '08:00'}', '${booking.bike_model}', '${booking.location}')">Chỉnh sửa</button>
+                            <button class="inline-block bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600" onclick="deleteBooking(${booking.id})">Xóa</button>
                         </div>
                     `;
                     maintenanceList.appendChild(bookingDiv);
                 });
             } catch (error) {
                 console.error('Error loading maintenance history:', error);
-                maintenanceList.innerHTML = '<p class="text-red-600">Không thể tải lịch đặt xe.</p>';
+                maintenanceList.innerHTML = '<p class="text-red-600">Không thể tải lịch đặt xe. Vui lòng thử lại.</p>';
             }
         }, 300);
 
@@ -445,15 +489,11 @@
         function editBooking(bookingId, currentDateTime, currentBikeModel, currentLocation) {
             const modal = document.getElementById('editModal');
             modal.classList.add('active');
-            document.getElementById('editBookingId').value = bookingId;
             document.getElementById('editDateTime').value = currentDateTime.slice(0, 16);
             document.getElementById('editBikeModel').value = currentBikeModel;
             document.getElementById('editLocation').value = currentLocation;
+            document.getElementById('editBookingId').value = bookingId;
             checkBookingStatus(bookingId);
-            modal.style.position = 'fixed';
-            modal.style.overflowY = 'auto';
-            modal.style.height = '100%';
-            modal.style.width = '100%';
         }
 
         // Check booking status
@@ -461,7 +501,7 @@
             const notification = document.getElementById('bookingNotification');
             try {
                 const response = await fetch('/api/maintenance_history?user_id={{ user.id }}');
-                if (!response.ok) throw new Error('Failed to fetch maintenance history');
+                if (!response.ok) throw new Error('Không thể tải lịch sử bảo dưỡng');
                 const data = await response.json();
                 const booking = data.history.find(b => b.id === bookingId);
                 const now = new Date();
@@ -552,19 +592,19 @@
         }
 
         // Initiate Payment
-        async function initiatePayment(index) {
+        async function initiatePayment(bookingId) {
             const spinner = document.getElementById('spinner');
             const messageDiv = document.getElementById('message');
             spinner.style.display = 'block';
 
             try {
                 const response = await fetch('/api/maintenance_history?user_id={{ user.id }}');
-                if (!response.ok) throw new Error('Failed to fetch maintenance history');
+                if (!response.ok) throw new Error('Không thể tải lịch sử bảo dưỡng');
                 const data = await response.json();
-                const booking = data.history[index];
-                const paymentUrl = `/payment/${index}`; // Sửa URL để khớp với route /payment/{booking_id}
-                window.location.href = paymentUrl; // Chuyển hướng thay vì mở tab mới
-
+                const booking = data.history.find(b => b.id === bookingId);
+                if (!booking) throw new Error('Lịch đặt xe không tồn tại');
+                const paymentUrl = `/payment/${bookingId}`;
+                window.location.href = paymentUrl;
                 messageDiv.classList.remove('hidden', 'bg-red-500');
                 messageDiv.classList.add('bg-green-500');
                 messageDiv.textContent = 'Đang chuyển hướng đến trang thanh toán.';
@@ -681,20 +721,17 @@
             setTimeout(() => messageDiv.classList.add('hidden'), 3000);
         });
 
-        // Toast notification
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `toast show ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 3000);
-        }
-
         // Initialize with profile tab active
         document.addEventListener('DOMContentLoaded', () => {
             console.log('DOM fully loaded, initializing...');
-            toggleSection('profile');
+            const hash = window.location.hash;
+            if (hash === '#maintenance') {
+                toggleSection('maintenance');
+            } else if (hash === '#password') {
+                toggleSection('password');
+            } else {
+                toggleSection('profile');
+            }
         });
     </script>
     {% if user %}
