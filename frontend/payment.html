@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thanh toán - MotoHub</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f9fafb;
+            margin: 0;
+        }
+        nav {
+            position: fixed;
+            top: 0;
+            z-index: 1000;
+            background-color: #ffffff;
+            width: 100%;
+        }
+        .content {
+            padding: 8rem 2rem 2rem 2rem;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .payment-card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+            max-width: 500px;
+            width: 100%;
+            transition: transform 0.2s ease;
+        }
+        .payment-card:hover {
+            transform: translateY(-4px);
+        }
+        .info-item label {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .info-item p {
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .qr-code {
+            margin: 1rem auto;
+            max-width: 200px;
+            display: block;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #10b981;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #ef4444;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .notification {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            display: none;
+        }
+        .notification.success {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .notification.error {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+        @media (max-width: 768px) {
+            .payment-card {
+                max-width: 100%;
+                padding: 1rem;
+            }
+            .qr-code {
+                max-width: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="bg-white shadow-md py-4 w-full">
+        <div class="container mx-auto flex justify-between items-center px-6">
+            <div class="flex items-center space-x-3">
+                <a href="/" class="flex items-center space-x-2">
+                    <img src="/static/motorhub-1.png" alt="Logo MotoHub" class="h-12">
+                    <span class="text-xl font-semibold text-gray-800 hover:text-red-600">MotoHub</span>
+                </a>
+            </div>
+            <div class="flex space-x-6 items-center">
+                <a href="/" class="text-gray-600 hover:text-red-600 text-lg">Trang chủ</a>
+                <a href="/search" class="text-gray-600 hover:text-red-600 text-lg">Tìm kiếm</a>
+                {% if not user %}
+                    <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Đăng nhập</a>
+                {% else %}
+                    <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Trang chính</a>
+                    <a href="/api/auth/logout" class="text-gray-600 hover:text-red-600 text-lg" onclick="dangXuat(event)">Đăng xuất</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="content">
+        {% if user %}
+            <div class="payment-card">
+                <h1 class="text-2xl font-bold text-gray-800 mb-6">Thanh toán bằng QR Code</h1>
+                
+                <!-- Success/Error Message -->
+                <div id="message" class="notification"></div>
+
+                <!-- Booking Details -->
+                <div id="paymentDetails" class="space-y-4">
+                    <div class="info-item">
+                        <label class="block text-sm font-medium text-gray-700">Ngày và giờ</label>
+                        <p class="mt-1 text-gray-600">{{ booking.date }} {{ booking.time or '(08:00)' }}</p>
+                    </div>
+                    <div class="info-item">
+                        <label class="block text-sm font-medium text-gray-700">Xe</label>
+                        <p class="mt-1 text-gray-600">{{ booking.bike_model }}</p>
+                    </div>
+                    <div class="info-item">
+                        <label class="block text-sm font-medium text-gray-700">Địa điểm</label>
+                        <p class="mt-1 text-gray-600">{{ booking.location }}</p>
+                    </div>
+                    <div class="info-item">
+                        <label class="block text-sm font-medium text-gray-700">Số tiền</label>
+                        <p id="amountDisplay" class="mt-1 text-gray-600">{{ booking.amount or 20000 }} VND</p>
+                    </div>
+                </div>
+
+                <!-- QR Code -->
+                <div id="qrCodeContainer" class="mt-4">
+                    <img id="qrCode" src="/static/images/bank_qr.png" alt="QR Code for Payment" class="qr-code">
+                    <p class="text-center text-gray-500 mt-2">Quét mã QR để chuyển khoản</p>
+                </div>
+
+                <!-- Confirm Payment Button -->
+                <div class="flex items-center space-x-4 mt-4">
+                    <button id="confirmPaymentBtn" class="flex-1 bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition duration-200">Xác nhận đã thanh toán</button>
+                    <div id="spinner" class="spinner"></div>
+                </div>
+            </div>
+        {% else %}
+            <div class="text-center">
+                <p class="text-lg text-gray-600">Vui lòng <a href="/login" class="text-red-600 hover:underline">đăng nhập</a> để thực hiện thanh toán.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // Logout function
+        function dangXuat(event) {
+            event.preventDefault();
+            fetch('/api/auth/logout', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
+                    showToast('Đăng xuất thất bại.', 'error');
+                });
+        }
+
+        // Toast notification
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Initialize Payment
+        document.addEventListener('DOMContentLoaded', () => {
+            const bookingId = "{{ booking_id }}";
+            const userId = "{{ user.id }}";
+            const messageDiv = document.getElementById('message');
+            const confirmPaymentBtn = document.getElementById('confirmPaymentBtn');
+            const spinner = document.getElementById('spinner');
+
+            if (!bookingId || !userId) {
+                messageDiv.textContent = 'Dữ liệu người dùng hoặc lịch bảo dưỡng không hợp lệ.';
+                messageDiv.className = 'notification error';
+                messageDiv.style.display = 'block';
+                confirmPaymentBtn.disabled = true;
+                return;
+            }
+
+            // Confirm Payment
+            confirmPaymentBtn.addEventListener('click', async () => {
+                spinner.style.display = 'block';
+                try {
+                    const response = await fetch('/api/notify_payment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user_id: userId,
+                            booking_id: bookingId
+                        })
+                    });
+                    const result = await response.json();
+                    if (response.ok) {
+                        messageDiv.textContent = result.message;
+                        messageDiv.className = 'notification success';
+                        messageDiv.style.display = 'block';
+                        confirmPaymentBtn.disabled = true;
+                    } else {
+                        throw new Error(result.message || 'Lỗi khi gửi thông báo thanh toán');
+                    }
+                } catch (error) {
+                    messageDiv.textContent = error.message;
+                    messageDiv.className = 'notification error';
+                    messageDiv.style.display = 'block';
+                } finally {
+                    spinner.style.display = 'none';
+                }
+                setTimeout(() => messageDiv.style.display = 'none', 3000);
+            });
+
+            // Poll payment status (every 5 seconds)
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/check_payment_status?booking_id=${bookingId}&user_id=${userId}`);
+                    if (!response.ok) throw new Error('Lỗi khi kiểm tra trạng thái thanh toán.');
+                    const status = await response.json();
+                    if (status.payment_status === 'paid') {
+                        messageDiv.textContent = 'Thanh toán thành công!';
+                        messageDiv.className = 'notification success';
+                        messageDiv.style.display = 'block';
+                        setTimeout(() => {
+                            messageDiv.style.display = 'none';
+                            window.location.href = '/dashboard';
+                        }, 3000);
+                        clearInterval(pollInterval);
+                    }
+                } catch (error) {
+                    console.error('Error polling payment status:', error);
+                }
+            }, 5000);
+        });
+    </script>
+    {% if user %}
+        <input type="hidden" name="user_id" value="{{ user.id }}">
+    {% endif %}
+</body>
+</html>

@@ -1,39 +1,182 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Community - Moto50Hub</title>
+    <title>Cộng đồng - MotoHub</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f9fafb;
+            margin: 0;
+        }
+        header {
+            padding: 15px 0;
+        }
+        header a {
+            margin-left: 15px;
+            text-decoration: none;
+            color: #4b5563;
+        }
+        header a:hover {
+            color: #dc2626;
+        }
+        .loading {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .post-image {
+            max-width: 100%;
+            height: auto;
+            margin-top: 10px;
+        }
+        .message-container {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f1f5f9;
+            border-radius: 8px;
+        }
+        .message-sent {
+            background-color: #3b82f6;
+            color: white;
+            margin-left: 20%;
+            margin-right: 5px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            margin-bottom: 5px;
+        }
+        .message-received {
+            background-color: #e5e7eb;
+            color: black;
+            margin-right: 20%;
+            margin-left: 5px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            margin-bottom: 5px;
+        }
+        .nav-tabs .nav-link {
+            color: #4b5563;
+        }
+        .nav-tabs .nav-link.active {
+            color: #dc2626;
+            border-bottom: 2px solid #dc2626;
+        }
+        .search-container {
+            max-width: 400px;
+        }
+        .no-results {
+            color: #6b7280;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <nav class="bg-white shadow-md py-4 fixed w-full z-10">
-        <div class="container mx-auto flex justify-between items-center px-6">
-            <a href="/dashboard" class="flex items-center">
-                <img src="/static/motorhub-1.png" alt="Moto50Hub Logo" class="h-12 mr-2">
-                <span class="text-xl font-semibold text-gray-800">☰</span>
-            </a>
-            <div class="space-x-6">
-                <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Dashboard</a>
-                {% if user %}
-                    <a href="#" class="text-gray-600 hover:text-red-600 text-lg" onclick="logout(event)">Log out</a>
-                {% else %}
-                    <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Sign in</a>
-                {% endif %}
+<body class="min-h-screen">
+    <!-- Navbar -->
+    <header>
+        <div class="container mx-auto">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-semibold text-gray-800">MotoHub</h1>
+                <div>
+                    <a href="/">Trang chủ</a>
+                    <a href="/search">Tìm kiếm</a>
+                    {% if not user %}
+                        <a href="/login">Đăng nhập</a>
+                    {% else %}
+                        <a href="/dashboard">Trang chính</a>
+                        <a href="/api/auth/logout" onclick="dangXuat(event)">Đăng xuất</a>
+                    {% endif %}
+                </div>
             </div>
         </div>
-    </nav>
+    </header>
 
+    <!-- Hidden element to pass userId from Jinja to JavaScript -->
+    <div id="user-data" style="display: none;" data-user-id="{{ user.id if user else 'null' }}"></div>
+
+    <!-- Main Content -->
     <div class="pt-20 pb-12">
         <div class="container mx-auto p-6">
-            <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Community</h1>
+            <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Cộng đồng</h1>
 
-            <!-- Form đăng bài -->
-            <div class="bg-white p-4 rounded shadow mb-6">
-                <h2 class="text-xl font-bold mb-2">Đăng bài mới</h2>
-                <input id="post-title" type="text" placeholder="Tiêu đề..." class="w-full border p-2 mb-2 rounded">
-                <textarea id="post-content" rows="4" placeholder="Nội dung..." class="w-full border p-2 mb-2 rounded"></textarea>
-                <button onclick="submitPost()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">Gửi</button>
+            <!-- Ô tìm kiếm và các nút -->
+            <div class="mb-6 flex space-x-2 items-center">
+                <div class="search-container">
+                    <input id="search-input" type="text" placeholder="Tìm kiếm bài viết..." class="w-full border p-2 rounded" onkeypress="if(event.key === 'Enter') searchPosts()">
+                </div>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="searchPosts()">Tìm</button>
+                <button class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded" data-bs-toggle="modal" data-bs-target="#postModal">Đăng bài mới</button>
+                <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded" onclick="loadPosts()">Tất cả bài viết</button>
+            </div>
+
+            <!-- Modal cho đăng bài -->
+            <div class="modal fade" id="postModal" tabindex="-1" aria-labelledby="postModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="postModalLabel">Đăng bài mới</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="postForm">
+                                <div class="mb-3">
+                                    <input id="post-title" type="text" placeholder="Tiêu đề..." class="w-full border p-2 rounded" required>
+                                </div>
+                                <div class="mb-3">
+                                    <textarea id="post-content" rows="4" placeholder="Nội dung..." class="w-full border p-2 rounded" required></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <input type="file" id="post-image" accept="image/*">
+                                </div>
+                                <button id="submit-post-btn" type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">Gửi</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal cho thông tin người dùng -->
+            <div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="userModalLabel">Thông tin người dùng</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <ul class="nav nav-tabs mb-3">
+                                <li class="nav-item">
+                                    <a class="nav-link active" id="posts-tab" data-bs-toggle="tab" href="#user-posts">Bài viết</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" id="messages-tab" data-bs-toggle="tab" href="#user-messages">Nhắn tin</a>
+                                </li>
+                            </ul>
+                            <div class="tab-content">
+                                <div class="tab-pane fade show active" id="user-posts">
+                                    <div id="userPostsContainer" class="space-y-6"></div>
+                                </div>
+                                <div class="tab-pane fade" id="user-messages">
+                                    <div class="message-container" id="messageContainer"></div>
+                                    <form id="messageForm" class="mt-3">
+                                        <input type="hidden" id="receiver-id">
+                                        <div class="flex">
+                                            <textarea id="message-content" rows="2" placeholder="Nhập tin nhắn..." class="w-full border p-2 rounded" required></textarea>
+                                            <button id="submit-message-btn" type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded ml-2">Gửi</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Danh sách bài viết -->
@@ -41,20 +184,20 @@
         </div>
     </div>
 
+    <!-- Footer -->
     <footer class="bg-gray-800 text-white py-8">
         <div class="container mx-auto text-center">
             <div class="mb-4">
-                <img src="/static/motorhub-1.png" alt="Moto50Hub Logo" class="h-12 mx-auto mb-4">
-                <p class="text-sm">Resources | Freebies | YouTube Podcast</p>
+                <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12 mx-auto mb-4">
             </div>
             <div class="mb-4">
-                <p><strong>Liên hệ:</strong> 0909 123 456 | support@moto50hub.com</p>
-                <p><strong>Địa chỉ:</strong> 123 Đường Lê Lợi, Quận 1, TP.HCM</p>
+                <p><strong>Liên hệ:</strong> 0906600710 | motohub@gmail.com</p>
+                <p><strong>Địa chỉ:</strong> 7 Đ. D1, Long Thạnh Mỹ, Thủ Đức, Vietnam</p>
             </div>
             <div class="space-x-4 mb-4">
-                <a href="#" class="text-gray-400 hover:text-white">Facebook</a>
+                <a href="https://www.facebook.com/profile.php?id=61576891661221" class="text-gray-400 hover:text-white" target="_blank">Facebook</a>
                 <a href="#" class="text-gray-400 hover:text-white">YouTube</a>
-                <a href="#" class="text-gray-400 hover:text-white">Zalo</a>
+                <a href="https://www.instagram.com/moto.hub201/" class="text-gray-400 hover:text-white" target="_blank">Instagram</a>
             </div>
             <div class="text-sm">
                 <a href="/privacy" class="text-gray-400 hover:text-white mr-2">Chính sách bảo mật</a>
@@ -63,83 +206,321 @@
         </div>
     </footer>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function logout(event) {
+        // Get userId from hidden element
+        const userId = document.getElementById('user-data').getAttribute('data-user-id');
+        console.log('User ID:', userId); // Debug user ID
+
+        function dangXuat(event) {
             event.preventDefault();
             fetch('/api/auth/logout', { method: 'POST' })
                 .then(response => response.json())
                 .then(() => {
-                    localStorage.removeItem('token');
                     window.location.href = '/';
                 })
                 .catch(error => console.error('Logout error:', error));
         }
 
-        async function loadPosts() {
-            const res = await fetch('/api/community/posts');
-            const data = await res.json();
-            const postsContainer = document.getElementById('posts');
-            postsContainer.innerHTML = '';
+        async function loadPosts(userIdFilter = null, searchQuery = null) {
+            let url = '/api/community/posts';
+            if (userIdFilter || searchQuery) {
+                const params = new URLSearchParams();
+                if (userIdFilter) params.append('user_id', userIdFilter);
+                if (searchQuery) params.append('search', encodeURIComponent(searchQuery));
+                url += `?${params.toString()}`;
+            }
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                const data = await res.json();
+                console.log('Posts data:', data); // Debug posts data
+                const postsContainer = document.getElementById('posts');
+                postsContainer.innerHTML = '';
 
-            data.posts.forEach(post => {
-                const commentsHTML = post.comments.map(c =>
-                    `<div class="ml-4 text-sm text-gray-700">💬 <strong>${c.commenter}:</strong> ${c.content}</div>`
-                ).join('');
+                if (data.posts.length === 0) {
+                    postsContainer.innerHTML = '<p class="no-results">Không tìm thấy bài viết nào.</p>';
+                    return;
+                }
 
-                const postHTML = `
-                    <div class="bg-white p-4 rounded shadow">
-                        <div class="mb-2">
-                            <h3 class="text-lg font-bold">${post.title}</h3>
-                            <p class="text-gray-700 mb-1">${post.content}</p>
-                            <p class="text-sm text-gray-500">🧑 ${post.author} - ${new Date(post.created_at).toLocaleString()}</p>
-                        </div>
-                        <div>${commentsHTML}</div>
-                        <div class="mt-2">
-                            <input type="text" placeholder="Viết bình luận..." class="border p-1 w-3/4 rounded" id="comment-${post.id}">
-                            <button onclick="submitComment(${post.id})" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-sm rounded">Gửi</button>
-                        </div>
-                    </div>`;
-                postsContainer.innerHTML += postHTML;
-            });
+                data.posts.forEach(post => {
+                    const formattedContent = post.content.replace(/\n/g, '<br>'); // Hiển thị xuống dòng
+                    const commentsHTML = post.comments.map(c =>
+                        `<div class="ml-4 text-sm text-gray-700">💬 <strong>${c.commenter}:</strong> ${c.content.replace(/\n/g, '<br>')} <span class="text-xs text-gray-500">(${new Date(c.created_at).toLocaleString()})</span></div>`
+                    ).join('');
+
+                    // Thêm ảnh nếu có
+                    const imageHTML = post.image ? `<img src="${post.image}" alt="Post image" class="post-image">` : '';
+
+                    // Thêm nút xóa
+                    const deleteButton = (userId !== 'null' && userId == post.user_id) ? `
+                        <button onclick="deletePost(${post.id})" class="bg-red-500 hover:bg-red-700 text-white px-2 py-1 text-sm rounded mt-2">Xóa</button>` : '';
+
+                    // Thêm nút nhắn tin
+                    const messageButton = (userId !== 'null' && userId != post.user_id) ? `
+                        <button onclick="openUserModal(${post.user_id}, '${post.author.replace(/'/g, "\\'")}')" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-sm rounded mt-2 ml-2">Nhắn tin</button>` : '';
+
+                    const postHTML = `
+                        <div class="bg-white p-4 rounded shadow">
+                            <div class="mb-2">
+                                <h3 class="text-lg font-bold">${post.title}</h3>
+                                <p class="text-gray-700 mb-1">${formattedContent}</p>
+                                ${imageHTML}
+                                <p class="text-sm text-gray-500">🧑 <a href="#" onclick="openUserModal(${post.user_id}, '${post.author.replace(/'/g, "\\'")}'); return false;" class="text-blue-600 hover:underline">${post.author}</a> - ${new Date(post.created_at).toLocaleString()}</p>
+                            </div>
+                            <div>${commentsHTML}</div>
+                            <div class="mt-2">
+                                <input type="text" placeholder="Viết bình luận..." class="border p-1 w-3/4 rounded" id="comment-${post.id}">
+                                <button id="comment-btn-${post.id}" onclick="submitComment(${post.id})" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-sm rounded">Gửi</button>
+                                ${deleteButton}
+                                ${messageButton}
+                            </div>
+                        </div>`;
+                    postsContainer.innerHTML += postHTML;
+                });
+            } catch (error) {
+                console.error('Lỗi khi lấy bài viết:', error);
+                alert('Lỗi kết nối server');
+            }
         }
 
-        async function submitPost() {
-            const title = document.getElementById('post-title').value;
-            const content = document.getElementById('post-content').value;
-            const res = await fetch('/api/community/post', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, content })
-            });
-            if (res.ok) {
-                loadPosts();
-                document.getElementById('post-title').value = '';
-                document.getElementById('post-content').value = '';
-            } else {
-                const err = await res.json();
-                alert("Lỗi khi đăng bài: " + (err.detail || "Chưa đăng nhập"));
+        async function searchPosts() {
+            const searchInput = document.getElementById('search-input');
+            const searchQuery = searchInput.value.trim();
+            if (!searchQuery) {
+                alert('Vui lòng nhập từ khóa tìm kiếm!');
+                return;
+            }
+            loadPosts(null, searchQuery);
+        }
+
+        async function openUserModal(userId, userName) {
+            document.getElementById('userModalLabel').textContent = `Thông tin của ${userName}`;
+            document.getElementById('receiver-id').value = userId;
+            const modal = new bootstrap.Modal(document.getElementById('userModal'));
+            await loadUserPosts(userId);
+            await loadMessages(userId);
+            modal.show();
+            // Kích hoạt tab bài viết mặc định
+            document.getElementById('posts-tab').click();
+        }
+
+        async function loadUserPosts(userId) {
+            try {
+                const res = await fetch(`/api/community/posts?user_id=${userId}`);
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                const data = await res.json();
+                console.log('User posts data:', data); // Debug user posts data
+                const postsContainer = document.getElementById('userPostsContainer');
+                postsContainer.innerHTML = '';
+
+                if (data.posts.length === 0) {
+                    postsContainer.innerHTML = '<p class="no-results">Người dùng này chưa đăng bài viết nào.</p>';
+                    return;
+                }
+
+                data.posts.forEach(post => {
+                    const formattedContent = post.content.replace(/\n/g, '<br>');
+                    const commentsHTML = post.comments.map(c =>
+                        `<div class="ml-4 text-sm text-gray-700">💬 <strong>${c.commenter}:</strong> ${c.content.replace(/\n/g, '<br>')} <span class="text-xs text-gray-500">(${new Date(c.created_at).toLocaleString()})</span></div>`
+                    ).join('');
+                    const imageHTML = post.image ? `<img src="${post.image}" alt="Post image" class="post-image">` : '';
+                    const deleteButton = (userId !== 'null' && userId == post.user_id) ? `
+                        <button onclick="deletePost(${post.id})" class="bg-red-500 hover:bg-red-700 text-white px-2 py-1 text-sm rounded mt-2">Xóa</button>` : '';
+
+                    const postHTML = `
+                        <div class="bg-white p-4 rounded shadow">
+                            <div class="mb-2">
+                                <h3 class="text-lg font-bold">${post.title}</h3>
+                                <p class="text-gray-700 mb-1">${formattedContent}</p>
+                                ${imageHTML}
+                                <p class="text-sm text-gray-500">🧑 ${post.author} - ${new Date(post.created_at).toLocaleString()}</p>
+                            </div>
+                            <div>${commentsHTML}</div>
+                            <div class="mt-2">${deleteButton}</div>
+                        </div>`;
+                    postsContainer.innerHTML += postHTML;
+                });
+            } catch (error) {
+                console.error('Lỗi khi lấy bài viết của người dùng:', error);
+                alert('Lỗi kết nối server');
+            }
+        }
+
+        async function loadMessages(receiverId) {
+            try {
+                const res = await fetch(`/api/private_messages?receiver_id=${receiverId}`);
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                const data = await res.json();
+                console.log('Messages data:', data); // Debug messages data
+                const messageContainer = document.getElementById('messageContainer');
+                messageContainer.innerHTML = '';
+                if (data.messages.length === 0) {
+                    messageContainer.innerHTML = '<p class="no-results">Chưa có tin nhắn nào.</p>';
+                    return;
+                }
+                data.messages.forEach(message => {
+                    const isSent = message.sender_id == userId;
+                    const messageHTML = `
+                        <div class="${isSent ? 'message-sent text-right' : 'message-received'}">
+                            <p class="mb-0">${message.content.replace(/\n/g, '<br>')}</p>
+                            <p class="text-xs ${isSent ? 'text-gray-200' : 'text-gray-500'}">${new Date(message.created_at).toLocaleString()}</p>
+                        </div>`;
+                    messageContainer.innerHTML += messageHTML;
+                });
+                messageContainer.scrollTop = messageContainer.scrollHeight; // Cuộn xuống cuối
+            } catch (error) {
+                console.error('Lỗi khi lấy tin nhắn:', error);
+                alert('Lỗi kết nối server');
+            }
+        }
+
+        async function submitPost(e) {
+            e.preventDefault();
+            const title = document.getElementById('post-title').value.trim();
+            const content = document.getElementById('post-content').value.trim();
+            const imageInput = document.getElementById('post-image');
+            const imageFile = imageInput.files[0];
+            if (!title || !content) {
+                alert('Tiêu đề và nội dung không được để trống!');
+                return;
+            }
+            const button = document.getElementById('submit-post-btn');
+            button.innerHTML = '<span class="loading">Gửi...</span>';
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('content', content);
+            if (imageFile) {
+                formData.append('image', imageFile);
+            }
+            try {
+                const res = await fetch('/api/community/post', {
+                    method: 'POST',
+                    body: formData
+                });
+                button.innerHTML = 'Gửi';
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('Post success:', data);
+                    bootstrap.Modal.getInstance(document.getElementById('postModal')).hide();
+                    document.getElementById('postForm').reset();
+                    loadPosts();
+                } else {
+                    const err = await res.json();
+                    console.log('Submit error:', err); // Debug error
+                    alert(`Lỗi khi đăng bài: ${err.detail || 'Không xác định'}`);
+                }
+            } catch (error) {
+                button.innerHTML = 'Gửi';
+                console.error('Fetch error:', error);
+                alert('Lỗi kết nối server');
             }
         }
 
         async function submitComment(postId) {
             const input = document.getElementById(`comment-${postId}`);
-            const content = input.value;
-            const res = await fetch('/api/community/comment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ post_id: postId, content })
-            });
-            if (res.ok) {
-                input.value = '';
-                input.focus();
-                loadPosts();
-            } else {
-                const err = await res.json();
-                alert("Lỗi bình luận: " + (err.detail || "Chưa đăng nhập"));
+            const content = input.value.trim();
+            if (!content) {
+                alert('Nội dung bình luận không được để trống!');
+                return;
+            }
+            const button = document.getElementById(`comment-btn-${postId}`);
+            button.innerHTML = '<span class="loading">Gửi...</span>';
+            try {
+                const res = await fetch('/api/community/comment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ post_id: postId, content })
+                });
+                button.innerHTML = 'Gửi';
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('Comment success:', data);
+                    input.value = '';
+                    input.focus();
+                    loadPosts();
+                } else {
+                    const err = await res.json();
+                    console.log('Comment error:', err); // Debug error
+                    alert(`Lỗi bình luận: ${err.detail || 'Không xác định'}`);
+                }
+            } catch (error) {
+                button.innerHTML = 'Gửi';
+                console.error('Fetch error:', error);
+                alert('Lỗi kết nối server');
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadPosts);
+        async function deletePost(postId) {
+            try {
+                const res = await fetch(`/api/community/post/${postId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('Delete success:', data);
+                    loadPosts();
+                    // Nếu modal người dùng đang mở, làm mới tab bài viết
+                    const receiverId = document.getElementById('receiver-id').value;
+                    if (receiverId) loadUserPosts(receiverId);
+                } else {
+                    const err = await res.json();
+                    console.log('Delete error:', err); // Debug error
+                    alert(`Lỗi khi xóa bài viết: ${err.detail || 'Không xác định'}`);
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                alert('Lỗi kết nối server');
+            }
+        }
+
+        async function submitMessage(e) {
+            e.preventDefault();
+            const receiverId = document.getElementById('receiver-id').value;
+            const content = document.getElementById('message-content').value.trim();
+            if (!content) {
+                alert('Nội dung tin nhắn không được để trống!');
+                return;
+            }
+            const button = document.getElementById('submit-message-btn');
+            button.innerHTML = '<span class="loading">Gửi...</span>';
+            try {
+                const res = await fetch('/api/private_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ receiver_id: parseInt(receiverId), content })
+                });
+                button.innerHTML = 'Gửi';
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('Message success:', data);
+                    document.getElementById('message-content').value = '';
+                    loadMessages(receiverId);
+                } else {
+                    const err = await res.json();
+                    console.log('Message error:', err); // Debug error
+                    alert(`Lỗi khi gửi tin nhắn: ${err.detail || 'Không xác định'}`);
+                }
+            } catch (error) {
+                button.innerHTML = 'Gửi';
+                console.error('Fetch error:', error);
+                alert('Lỗi kết nối server');
+            }
+        }
+
+        // Gắn sự kiện submit cho form
+        document.getElementById('postForm').addEventListener('submit', submitPost);
+        document.getElementById('messageForm').addEventListener('submit', submitMessage);
+
+        // Load bài viết khi trang được tải
+        document.addEventListener('DOMContentLoaded', () => loadPosts());
     </script>
 </body>
 </html>

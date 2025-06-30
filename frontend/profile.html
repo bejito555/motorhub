@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile - MotoHub</title>
+    <title>MotoHub</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <style>
@@ -11,12 +11,22 @@
             font-family: 'Poppins', sans-serif;
             background-color: #f9fafb;
             margin: 0;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
         nav {
             position: fixed;
             top: 0;
             z-index: 1000;
             background-color: #ffffff;
+            width: 100%;
+        }
+        .container-wrapper {
+            display: flex;
+            flex: 1;
+            margin-top: 80px; /* Chiều cao navbar */
         }
         .sidebar {
             width: 260px;
@@ -27,30 +37,21 @@
             position: fixed;
             top: 80px;
             left: 0;
-            transition: transform 0.3s ease;
+            z-index: 900;
         }
         .content {
+            flex: 1;
             margin-left: 260px;
-            padding: 8rem 2rem 2rem 2rem; /* Top padding to avoid navbar overlap */
-            min-height: 100vh;
+            padding: 2rem;
+            overflow-y: auto;
         }
         .profile-card {
             background-color: #ffffff;
             border-radius: 12px;
             padding: 2rem;
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
-            max-width: 600px; /* Widened profile card */
-            transition: transform 0.2s ease;
-        }
-        .profile-card:hover {
-            transform: translateY(-4px);
-        }
-        .profile-card img {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid #e5e7eb;
+            max-width: 600px;
+            margin: 0 auto; /* Căn giữa content */
         }
         .info-item label {
             font-weight: 600;
@@ -58,14 +59,18 @@
             margin-bottom: 0.5rem;
             display: block;
         }
-        .info-item span, .info-item input {
+        .info-item input {
             color: #6b7280;
             font-size: 0.9rem;
             width: 100%;
         }
         .sidebar a:hover {
             background-color: #f3f4f6;
-            transform: translateX(4px);
+        }
+        .sidebar a.active {
+            background-color: #fef2f2;
+            color: #ef4444;
+            font-weight: 600;
         }
         .toast {
             position: fixed;
@@ -76,9 +81,9 @@
             padding: 1rem;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            z-index: 100;
+            z-index: 1100;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.2s ease;
         }
         .toast.show {
             opacity: 1;
@@ -89,25 +94,66 @@
             border-radius: 50%;
             width: 24px;
             height: 24px;
-            animation: spin 1s linear infinite;
+            animation: spin 0.8s linear infinite;
             display: none;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1050;
+            opacity: 0;
+        }
+        .modal.active {
+            display: block;
+            opacity: 1;
+        }
+        .notification {
+            display: none;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+        }
+        .notification.expired {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+        .notification.warning {
+            background-color: #fefcbf;
+            color: #d97706;
+        }
+        .payment-status {
+            margin-top: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+        }
+        .payment-status.unpaid {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+        .payment-status.paid {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
         @media (max-width: 768px) {
             .sidebar {
-                transform: translateX(-100%);
-            }
-            .sidebar.active {
-                transform: translateX(0);
+                display: none;
             }
             .content {
                 margin-left: 0;
             }
             .profile-card {
-                max-width: 100%; /* Full width on mobile */
+                max-width: 100%;
             }
         }
     </style>
@@ -117,11 +163,6 @@
     <nav class="bg-white shadow-md py-4 w-full">
         <div class="container mx-auto flex justify-between items-center px-6">
             <div class="flex items-center space-x-3">
-                <button id="menuToggle" class="md:hidden text-gray-600 hover:text-red-600">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                </button>
                 <a href="/" class="flex items-center space-x-2">
                     <img src="/static/motorhub-1.png" alt="Logo MotoHub" class="h-12">
                     <span class="text-xl font-semibold text-gray-800 hover:text-red-600">MotoHub</span>
@@ -140,143 +181,120 @@
         </div>
     </nav>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        {% if user %}
-            <div class="flex items-center space-x-3 mb-6">
-                <img src="https://ui-avatars.com/api/?name={{ user.fullName }}&background=ef4444&color=fff&size=128" alt="User Image" class="h-14 w-14 rounded-full">
-                <div>
-                    <p class="text-gray-900 font-semibold text-lg">{{ user.fullName }}</p>
-                    <p class="text-gray-500 text-sm">{{ user.email }}</p>
+    <!-- Container Wrapper -->
+    <div class="container-wrapper">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            {% if user %}
+                <div class="flex items-center space-x-3 mb-6">
+                    <img src="https://ui-avatars.com/api/?name={{ user.fullName }}&background=ef4444&color=fff&size=128" alt="User Image" class="h-14 w-14 rounded-full">
+                    <div>
+                        <p class="text-gray-900 font-semibold text-lg">{{ user.fullName }}</p>
+                        <p class="text-gray-500 text-sm">{{ user.email }}</p>
+                    </div>
                 </div>
-            </div>
-            <div class="space-y-2">
-                <a href="/profile" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    <span>Profile</span>
-                </a>
-                <a href="/api/auth/logout" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg" onclick="dangXuat(event)">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    <span>Logout</span>
-                </a>
-            </div>
-        {% else %}
-            <p class="text-center text-gray-600 text-lg">Please login to view your profile.</p>
-        {% endif %}
-    </div>
+                <div class="space-y-2">
+                    <a href="#" id="profileLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg active">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <span>Hồ sơ</span>
+                    </a>
+                    <a href="#" id="passwordLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0-1.104-.896-2-2-2s-2 .896-2 2v1H7v4h10v-4h-1v-1c0-1.104-.896-2-2-2s-2 .896-2 2m5 1h-2v-1c0-1.656 1.344-3 3-3s3 1.344 3 3v1h-2v4H5v-4h2v-1c0-1.656 1.344-3 3-3s3 1.344 3 3v1z" />
+                        </svg>
+                        <span>Đổi mật khẩu hiện tại</span>
+                    </a>
+                    <a href="#" id="maintenanceLink" class="flex items-center space-x-3 text-gray-600 hover:text-red-500 p-3 rounded-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>Lịch đặt xe</span>
+                    </a>
+                </div>
+            {% else %}
+                <p class="text-center text-gray-600 text-lg">Vui lòng đăng nhập để xem hồ sơ.</p>
+            {% endif %}
+        </div>
 
-    <!-- Main Content -->
-    <div class="content">
-        {% if user %}
-            <div class="profile-card">
-                <div class="flex justify-between items-center mb-8">
-                    <div class="flex items-center space-x-4">
-                        <div class="relative">
-                            <img id="profileImage" src="https://ui-avatars.com/api/?name={{ user.fullName }}&background=ef4444&color=fff&size=128" alt="User Image" class="h-16 w-16 rounded-full">
-                            <input type="file" id="profileImageInput" accept="image/*" class="hidden">
-                            <button onclick="document.getElementById('profileImageInput').click()" class="absolute bottom-0 right-0 bg-red-500 text-white rounded-full p-1 hover:bg-red-600">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                            </button>
+        <!-- Main Content -->
+        <div class="content">
+            {% if user %}
+                <div class="profile-card mx-auto">
+                    <!-- Success/Error Message -->
+                    <div id="message" class="hidden mb-4 p-4 rounded text-white"></div>
+
+                    <!-- Profile Form -->
+                    <div id="profile-content" class="space-y-4">
+                        <h1 class="text-2xl font-bold text-gray-800 mb-6">Hồ sơ</h1>
+                        <form id="profileForm" class="space-y-4">
+                            <div class="info-item">
+                                <label for="fullName" class="block text-sm font-medium text-gray-700">Họ và tên</label>
+                                <input type="text" id="fullName" name="fullName" value="{{ user.fullName }}" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" required>
+                            </div>
+                            <div class="info-item">
+                                <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                                <input type="email" id="email" name="email" value="{{ user.email }}" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" required>
+                            </div>
+                            <div class="info-item">
+                                <label for="mobile" class="block text-sm font-medium text-gray-700">Số điện thoại</label>
+                                <input type="text" id="mobile" name="mobile" value="{{ user.mobile if user.mobile else '' }}" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500">
+                            </div>
+                            <div class="info-item">
+                                <label for="location" class="block text-sm font-medium text-gray-700">Địa chỉ</label>
+                                <input type="text" id="location" name="location" value="{{ user.location if user.location else '' }}" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500">
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <button type="submit" class="flex-1 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 transition duration-200">Lưu thay đổi</button>
+                                <div id="spinner" class="spinner"></div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Password Reset Form -->
+                    <div id="password-content" class="space-y-4 hidden">
+                        <h1 class="text-2xl font-bold text-gray-800 mb-6">Đổi mật khẩu hiện tại</h1>
+                        <form id="passwordForm" class="space-y-4">
+                            <div class="info-item">
+                                <label for="old_password" class="block text-sm font-medium text-gray-700">Mật khẩu cũ (để trống nếu chưa có)</label>
+                                <input type="password" id="old_password" name="old_password" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500">
+                            </div>
+                            <div class="info-item">
+                                <label for="new_password" class="block text-sm font-medium text-gray-700">Mật khẩu mới</label>
+                                <input type="password" id="new_password" name="new_password" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" required minlength="8">
+                            </div>
+                            <div class="info-item">
+                                <label for="confirm_password" class="block text-sm font-medium text-gray-700">Xác nhận mật khẩu mới</label>
+                                <input type="password" id="confirm_password" name="confirm_password" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" required minlength="8">
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <button type="submit" class="flex-1 bg-green-500 text-white py-2 rounded-md hover:bg-green-700 transition duration-200">Đặt lại mật khẩu</button>
+                                <div id="spinner" class="spinner"></div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Maintenance History -->
+                    <div id="maintenance-content" class="space-y-4 hidden">
+                        <h1 class="text-2xl font-bold text-gray-800 mb-6">Lịch đặt xe</h1>
+                        <div id="maintenance-list" class="space-y-4">
+                            <!-- Populated by JavaScript -->
                         </div>
-                        <div>
-                            <h2 class="text-2xl font-bold text-gray-900">{{ user.fullName }}</h2>
-                            <p class="text-gray-500 text-base">{{ user.email }}</p>
-                        </div>
                     </div>
-                    <button id="closeButton" class="text-gray-400 hover:text-gray-600 text-2xl font-light">×</button>
                 </div>
-                <div class="space-y-6">
-                    <div class="info-item">
-                        <label>Name</label>
-                        <span>{{ user.fullName }}</span>
-                    </div>
-                    <div class="info-item">
-                        <label>Email</label>
-                        <span>{{ user.email }}</span>
-                    </div>
-                    <div class="info-item">
-                        <label>Phone</label>
-                        <span>{{ user.mobile if user.mobile else 'Not provided' }}</span>
-                    </div>
-                    <div class="info-item">
-                        <label>Location</label>
-                        <span>{{ user.location if user.location else 'Not provided' }}</span>
-                    </div>
-                    <div class="flex items-center space-x-4 mt-8">
-                    <button type="button" id="editButton" class="flex-1 bg-red-500 text-white px-4 py-3 rounded-lg hover:bg-red-600 font-medium">Edit Profile</button>
-                    <div id="spinner" class="spinner"></div>
+            {% else %}
+                <div class="text-center">
+                    <p class="text-lg text-gray-600">Vui lòng <a href="/login" class="text-red-600 hover:underline">đăng nhập</a> để xem thông tin.</p>
                 </div>
-            </div>
-        {% else %}
-            <p class="text-center text-gray-600 text-lg">Please login to view your profile.</p>
-        {% endif %}
+            {% endif %}
+        </div>
     </div>
 
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
     <script>
-        // Mobile menu toggle
-        const menuToggle = document.getElementById('menuToggle');
-        const sidebar = document.querySelector('.sidebar');
-        menuToggle.addEventListener('click', () => {
-            sidebar.classList.toggle('active');
-        });
-
-        // Close button
-        const closeButton = document.getElementById('closeButton');
-        closeButton.addEventListener('click', () => {
-            window.location.href = '/dashboard';
-        });
-
-        // Profile image upload
-        const profileImageInput = document.getElementById('profileImageInput');
-        const profileImage = document.getElementById('profileImage');
-        profileImageInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    profileImage.src = e.target.result;
-                    saveProfileImage(file);
-                };
-                reader.readAsDataURL(file);
-            } else {
-                showToast('Please select a valid image file.', 'error');
-            }
-        });
-
-        async function saveProfileImage(file) {
-            const userElement = document.querySelector('input[name="user_id"]');
-            const userId = userElement ? userElement.value : null;
-            if (!userId) {
-                showToast('Please login to update your profile picture.', 'error');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('user_id', userId);
-            formData.append('profile_image', file);
-
-            try {
-                const response = await fetch('/api/update_profile_image', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                showToast(data.message, response.ok ? 'success' : 'error');
-            } catch (error) {
-                console.error('Error uploading image:', error);
-                showToast('Failed to upload profile picture.', 'error');
-            }
-        }
-
         // Logout function
         function dangXuat(event) {
             event.preventDefault();
@@ -288,111 +306,380 @@
                 })
                 .catch(error => {
                     console.error('Logout error:', error);
-                    showToast('Failed to logout.', 'error');
+                    showToast('Đăng xuất thất bại.', 'error');
                 });
         }
 
-        // Edit profile toggle
-        function toggleEdit() {
-            const spans = document.querySelectorAll('.profile-card span');
-            const inputs = document.querySelectorAll('.profile-card input');
-            const editButton = document.getElementById('editButton');
-            const isEditable = spans.length > 0;
+        // Tab switching
+        const profileLink = document.getElementById('profileLink');
+        const passwordLink = document.getElementById('passwordLink');
+        const maintenanceLink = document.getElementById('maintenanceLink');
+        const profileContent = document.getElementById('profile-content');
+        const passwordContent = document.getElementById('password-content');
+        const maintenanceContent = document.getElementById('maintenance-content');
 
-            if (isEditable) {
-                spans.forEach(span => {
-                    const input = document.createElement('input');
-                    input.type = span.parentElement.querySelector('label').textContent === 'Phone' ? 'tel' : 'text';
-                    input.value = span.textContent === 'Not provided' ? '' : span.textContent;
-                    input.className = 'border border-gray-300 rounded-lg p-2 w-full focus:outline-none focus:ring-2 focus:ring-red-500';
-                    if (span.parentElement.querySelector('label').textContent === 'Email') {
-                        input.type = 'email';
+        function toggleSection(section) {
+            console.log(`Switching to ${section}`);
+            profileContent.classList.add('hidden');
+            passwordContent.classList.add('hidden');
+            maintenanceContent.classList.add('hidden');
+            profileLink.classList.remove('active');
+            passwordLink.classList.remove('active');
+            maintenanceLink.classList.remove('active');
+
+            if (section === 'profile') {
+                profileContent.classList.remove('hidden');
+                profileLink.classList.add('active');
+            } else if (section === 'password') {
+                passwordContent.classList.remove('hidden');
+                passwordLink.classList.add('active');
+            } else if (section === 'maintenance') {
+                maintenanceContent.classList.remove('hidden');
+                maintenanceLink.classList.add('active');
+                debounceLoadMaintenanceHistory();
+            }
+        }
+
+        profileLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleSection('profile');
+        });
+
+        passwordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleSection('password');
+        });
+
+        maintenanceLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleSection('maintenance');
+        });
+
+        // Debounce function to prevent multiple rapid calls
+        function debounce(func, wait = 300) {
+            let timeout;
+            return function (...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        // Load maintenance history with debounce
+        const debounceLoadMaintenanceHistory = debounce(async () => {
+            console.log('Loading maintenance history...');
+            const maintenanceList = document.getElementById('maintenance-list');
+            maintenanceList.innerHTML = '<div class="spinner mx-auto"></div>';
+            try {
+                const response = await fetch('/api/maintenance_history?user_id={{ user.id }}');
+                if (!response.ok) throw new Error('Failed to fetch maintenance history');
+                const data = await response.json();
+                console.log('Maintenance data:', data);
+                maintenanceList.innerHTML = '';
+                if (data.history.length === 0) {
+                    maintenanceList.innerHTML = '<p class="text-gray-600">Chưa có lịch đặt xe.</p>';
+                    return;
+                }
+                data.history.forEach((booking, index) => {
+                    const bookingDiv = document.createElement('div');
+                    bookingDiv.className = 'border border-gray-200 rounded-md p-4';
+                    const now = new Date();
+                    const [datePart] = booking.date.split('T');
+                    const bookingDateTime = new Date(`${datePart}T${booking.time || '08:00'}`);
+                    const fiveHoursFromNow = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+                    const timeLeft = Math.max(0, (fiveHoursFromNow - now) / (1000 * 60)); // Phút còn lại
+
+                    let notification = '';
+                    let paymentStatusClass = booking.payment_status === 'paid' ? 'paid' : 'unpaid';
+                    if (bookingDateTime < now && booking.payment_status === 'unpaid') {
+                        notification = '<div class="notification expired">Lịch đặt đã hết hạn</div>';
+                        paymentStatusClass = 'unpaid expired';
+                    } else if (bookingDateTime <= fiveHoursFromNow && booking.payment_status === 'unpaid') {
+                        notification = `<div class="notification warning">Vui lòng thanh toán trong vòng ${Math.ceil(timeLeft)} phút</div>`;
                     }
-                    span.parentElement.replaceChild(input, span);
+
+                    const baseAmount = 20000; // 20,000 VND mỗi lượt đặt lịch
+
+                    bookingDiv.innerHTML = `
+                        <p class="text-sm text-gray-700"><strong>Ngày và giờ:</strong> ${booking.date} ${booking.time || '(08:00)'}</p>
+                        <p class="text-sm text-gray-700"><strong>Xe:</strong> ${booking.bike_model}</p>
+                        <p class="text-sm text-gray-700"><strong>Địa điểm:</strong> ${booking.location}</p>
+                        <div class="payment-status ${paymentStatusClass}"><strong>Trạng thái thanh toán:</strong> ${booking.payment_status === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}</div>
+                        <p class="text-sm text-gray-700"><strong>Số tiền:</strong> ${baseAmount.toLocaleString()} VND</p>
+                        ${notification}
+                        <div class="flex space-x-2 mt-2">
+                            <button class="inline-block bg-blue-500 text-white py-1 px-3 rounded-md hover:bg-blue-600 ${booking.payment_status === 'paid' ? 'disabled' : ''}" onclick="initiatePayment(${index})" ${booking.payment_status === 'paid' ? 'disabled' : ''}>Thanh toán</button>
+                            <button class="inline-block bg-yellow-500 text-white py-1 px-3 rounded-md hover:bg-yellow-600" onclick="editBooking(${index}, '${booking.date}T${booking.time || '08:00'}', '${booking.bike_model}', '${booking.location}')">Chỉnh sửa</button>
+                            <button class="inline-block bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600" onclick="deleteBooking(${index})">Xóa</button>
+                        </div>
+                    `;
+                    maintenanceList.appendChild(bookingDiv);
                 });
-                editButton.textContent = 'Save Changes';
-                editButton.classList.add('bg-green-500');
-                editButton.classList.remove('bg-red-500');
-            } else {
-                const newValues = {};
-                let isValid = true;
-                inputs.forEach(input => {
-                    const label = input.parentElement.querySelector('label').textContent;
-                    const value = input.value.trim();
-                    if (label === 'Email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-                        showToast('Please enter a valid email address.', 'error');
-                        isValid = false;
-                    }
-                    if (label === 'Phone' && value && !/^\+?\d{10,15}$/.test(value)) {
-                        showToast('Please enter a valid phone number.', 'error');
-                        isValid = false;
-                    }
-                    newValues[label] = value;
-                });
-                if (isValid) {
-                    saveProfile(newValues);
-                    inputs.forEach(input => {
-                        const span = document.createElement('span');
-                        span.textContent = input.value || 'Not provided';
-                        input.parentElement.replaceChild(span, input);
+            } catch (error) {
+                console.error('Error loading maintenance history:', error);
+                maintenanceList.innerHTML = '<p class="text-red-600">Không thể tải lịch đặt xe.</p>';
+            }
+        }, 300);
+
+        // Delete booking
+        async function deleteBooking(bookingId) {
+            if (confirm('Bạn có chắc muốn xóa lịch đặt xe này?')) {
+                try {
+                    const response = await fetch(`/api/delete_maintenance?booking_id=${bookingId}&user_id={{ user.id }}`, {
+                        method: 'DELETE'
                     });
-                    editButton.textContent = 'Edit Profile';
-                    editButton.classList.add('bg-red-500');
-                    editButton.classList.remove('bg-green-500');
+                    const result = await response.json();
+                    if (response.ok) {
+                        showToast(result.message);
+                        debounceLoadMaintenanceHistory();
+                    } else {
+                        throw new Error(result.message || 'Lỗi khi xóa lịch đặt xe');
+                    }
+                } catch (error) {
+                    console.error('Error deleting booking:', error);
+                    showToast('Không thể xóa lịch đặt xe. Vui lòng thử lại.', 'error');
                 }
             }
         }
 
-        // Save profile
-        async function saveProfile(newValues) {
-            const userElement = document.querySelector('input[name="user_id"]');
-            const userId = userElement ? userElement.value : null;
+        // Edit booking
+        function editBooking(bookingId, currentDateTime, currentBikeModel, currentLocation) {
+            const modal = document.getElementById('editModal');
+            modal.classList.add('active');
+            document.getElementById('editBookingId').value = bookingId;
+            document.getElementById('editDateTime').value = currentDateTime.slice(0, 16);
+            document.getElementById('editBikeModel').value = currentBikeModel;
+            document.getElementById('editLocation').value = currentLocation;
+            checkBookingStatus(bookingId);
+            modal.style.position = 'fixed';
+            modal.style.overflowY = 'auto';
+            modal.style.height = '100%';
+            modal.style.width = '100%';
+        }
+
+        // Check booking status
+        async function checkBookingStatus(bookingId) {
+            const notification = document.getElementById('bookingNotification');
+            try {
+                const response = await fetch('/api/maintenance_history?user_id={{ user.id }}');
+                if (!response.ok) throw new Error('Failed to fetch maintenance history');
+                const data = await response.json();
+                const booking = data.history.find(b => b.id === bookingId);
+                const now = new Date();
+                const [datePart] = booking.date.split('T');
+                const bookingDateTime = new Date(`${datePart}T${booking.time || '08:00'}`);
+                const fiveHoursFromNow = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+
+                if (bookingDateTime < now && booking.payment_status === 'unpaid') {
+                    notification.textContent = 'Lịch đặt đã hết hạn';
+                    notification.className = 'notification expired';
+                    notification.style.display = 'block';
+                } else if (bookingDateTime <= fiveHoursFromNow && booking.payment_status === 'unpaid') {
+                    notification.textContent = 'Vui lòng thanh toán trong vòng 5 tiếng để sắp xếp cửa hàng';
+                    notification.className = 'notification warning';
+                    notification.style.display = 'block';
+                } else {
+                    notification.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error checking booking status:', error);
+                notification.textContent = 'Không thể kiểm tra trạng thái lịch đặt.';
+                notification.className = 'notification expired';
+                notification.style.display = 'block';
+            }
+        }
+
+        // Save edited booking
+        document.getElementById('editForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const bookingId = document.getElementById('editBookingId').value;
+            const newDateTime = document.getElementById('editDateTime').value;
+            const newBikeModel = document.getElementById('editBikeModel').value;
+            const newLocation = document.getElementById('editLocation').value;
             const spinner = document.getElementById('spinner');
-            if (!userId) {
-                showToast('Please login to update your profile.', 'error');
+            spinner.style.display = 'block';
+            const messageDiv = document.getElementById('message');
+            const notification = document.getElementById('bookingNotification');
+
+            if (!newDateTime || !newBikeModel || !newLocation) {
+                messageDiv.classList.remove('hidden', 'bg-green-500');
+                messageDiv.classList.add('bg-red-500');
+                messageDiv.textContent = 'Vui lòng điền đầy đủ thông tin ngày, xe và địa điểm.';
+                spinner.style.display = 'none';
+                setTimeout(() => messageDiv.classList.add('hidden'), 3000);
                 return;
             }
 
-            spinner.style.display = 'block';
+            const [newDate] = newDateTime.split('T');
             try {
-                const response = await fetch('/api/update_profile', {
+                const response = await fetch('/api/edit_maintenance', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        user_id: userId, 
-                        fullName: newValues['Name'], 
-                        email: newValues['Email'], 
-                        mobile: newValues['Phone'], 
-                        location: newValues['Location'] 
+                    body: JSON.stringify({
+                        user_id: "{{ user.id }}",
+                        booking_id: bookingId,
+                        date: newDate,
+                        bike_model: newBikeModel,
+                        location: newLocation
                     })
                 });
-
-                const data = await response.json();
-                showToast(data.message, response.ok ? 'success' : 'error');
+                const result = await response.json();
                 if (response.ok) {
-                    setTimeout(() => location.reload(), 1000);
+                    messageDiv.classList.remove('hidden', 'bg-red-500');
+                    messageDiv.classList.add('bg-green-500');
+                    messageDiv.textContent = result.message;
+                    closeModal();
+                    debounceLoadMaintenanceHistory();
+                    notification.style.display = 'none';
+                } else {
+                    throw new Error(result.message || 'Lỗi khi chỉnh sửa lịch đặt xe');
                 }
             } catch (error) {
-                console.error('Error updating profile:', error);
-                showToast('An error occurred while updating your profile.', 'error');
+                messageDiv.classList.remove('hidden', 'bg-green-500');
+                messageDiv.classList.add('bg-red-500');
+                messageDiv.textContent = `Chỉnh sửa thất bại: ${error.message}`;
+            } finally {
+                spinner.style.display = 'none';
+            }
+            setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+        });
+
+        // Close modal
+        function closeModal() {
+            const modal = document.getElementById('editModal');
+            modal.classList.remove('active');
+            const notification = document.getElementById('bookingNotification');
+            notification.style.display = 'none';
+        }
+
+        // Initiate Payment
+        async function initiatePayment(index) {
+            const spinner = document.getElementById('spinner');
+            const messageDiv = document.getElementById('message');
+            spinner.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/maintenance_history?user_id={{ user.id }}');
+                if (!response.ok) throw new Error('Failed to fetch maintenance history');
+                const data = await response.json();
+                const booking = data.history[index];
+                const paymentUrl = `/payment/${index}`; // Sửa URL để khớp với route /payment/{booking_id}
+                window.location.href = paymentUrl; // Chuyển hướng thay vì mở tab mới
+
+                messageDiv.classList.remove('hidden', 'bg-red-500');
+                messageDiv.classList.add('bg-green-500');
+                messageDiv.textContent = 'Đang chuyển hướng đến trang thanh toán.';
+                setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+            } catch (error) {
+                messageDiv.classList.remove('hidden', 'bg-green-500');
+                messageDiv.classList.add('bg-red-500');
+                messageDiv.textContent = error.message;
+                setTimeout(() => messageDiv.classList.add('hidden'), 3000);
             } finally {
                 spinner.style.display = 'none';
             }
         }
-<div class="mt-10">
-    <h3 class="text-xl font-semibold text-gray-900 mb-2">Lịch sử đặt lịch bảo trì</h3>
-    {% if history %}
-        <ul class="space-y-2">
-            {% for booking in history %}
-                <li class="bg-gray-50 p-4 rounded shadow-sm border border-gray-200">
-                    📅 <strong>{{ booking.date }}</strong> — 🚘 <em>{{ booking.bike_model }}</em>
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p class="text-gray-500 text-sm">Bạn chưa từng đặt lịch bảo trì nào.</p>
-    {% endif %}
-</div>
+
+        // Profile Update
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const spinner = document.getElementById('spinner');
+            spinner.style.display = 'block';
+            const data = {
+                user_id: "{{ user.id }}",
+                fullName: formData.get('fullName'),
+                email: formData.get('email'),
+                mobile: formData.get('mobile') || null,
+                location: formData.get('location') || null
+            };
+
+            const messageDiv = document.getElementById('message');
+            try {
+                const response = await fetch('/api/update_profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                messageDiv.classList.remove('hidden', 'bg-red-500');
+                messageDiv.classList.add('bg-green-500');
+                messageDiv.textContent = result.message;
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                messageDiv.classList.remove('hidden', 'bg-green-500');
+                messageDiv.classList.add('bg-red-500');
+                messageDiv.textContent = 'Cập nhật thất bại. Vui lòng thử lại.';
+            } finally {
+                spinner.style.display = 'none';
+            }
+            setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+        });
+
+        // Password Reset
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const newPassword = formData.get('new_password');
+            const confirmPassword = formData.get('confirm_password');
+            const spinner = document.getElementById('spinner');
+            spinner.style.display = 'block';
+            const messageDiv = document.getElementById('message');
+
+            if (newPassword.length < 8) {
+                messageDiv.classList.remove('hidden', 'bg-green-500');
+                messageDiv.classList.add('bg-red-500');
+                messageDiv.textContent = 'Mật khẩu mới phải có ít nhất 8 ký tự.';
+                spinner.style.display = 'none';
+                setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                messageDiv.classList.remove('hidden', 'bg-green-500');
+                messageDiv.classList.add('bg-red-500');
+                messageDiv.textContent = 'Mật khẩu mới và xác nhận không khớp.';
+                spinner.style.display = 'none';
+                setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                return;
+            }
+
+            const data = {
+                user_id: "{{ user.id }}",
+                old_password: formData.get('old_password') || '',
+                new_password: newPassword,
+                confirm_password: confirmPassword
+            };
+
+            try {
+                const response = await fetch('/api/reset_password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                messageDiv.classList.remove('hidden', 'bg-red-500');
+                messageDiv.classList.add('bg-green-500');
+                messageDiv.textContent = 'Mật khẩu đã được cập nhật. Bạn sẽ được đăng xuất sau 3 giây.';
+                e.target.reset();
+                setTimeout(async () => {
+                    try {
+                        await fetch('/api/auth/logout', { method: 'POST' });
+                        localStorage.removeItem('token');
+                        window.location.href = '/login';
+                    } catch (error) {
+                        console.error('Logout error:', error);
+                        showToast('Đăng xuất thất bại.', 'error');
+                    }
+                }, 3000);
+            } catch (error) {
+                messageDiv.classList.remove('hidden', 'bg-green-500');
+                messageDiv.classList.add('bg-red-500');
+                messageDiv.textContent = 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.';
+            } finally {
+                spinner.style.display = 'none';
+            }
+            setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+        });
 
         // Toast notification
         function showToast(message, type = 'success') {
@@ -403,24 +690,13 @@
                 toast.classList.remove('show');
             }, 3000);
         }
-<button onclick="scrollToMaintenance()" class="mt-4 w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600">Xem lịch bảo dưỡng</button>
-<script>
-function scrollToMaintenance() {
-    const historySection = document.querySelector('h3.text-xl.font-semibold');
-    if (historySection) {
-        historySection.scrollIntoView({ behavior: 'smooth' });
-    }
-}
-</script>
-<script>       
-        document.getElementById('editButton').addEventListener('click', toggleEdit);
-</script>
-<h3>Lịch sử bảo dưỡng</h3>
-<ul>
-  {% for item in history %}
-    <li>Ngày: {{ item.date }} | Xe: {{ item.bike_model }}</li>
-  {% endfor %}
-</ul>
+
+        // Initialize with profile tab active
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM fully loaded, initializing...');
+            toggleSection('profile');
+        });
+    </script>
     {% if user %}
         <input type="hidden" name="user_id" value="{{ user.id }}">
     {% endif %}
