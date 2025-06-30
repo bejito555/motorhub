@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Request, Response, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -17,12 +17,14 @@ from dotenv import load_dotenv
 from google.oauth2 import id_token
 from google.auth.transport import requests
 import json
+import uuid
+import shutil
 
 # Load biến môi trường
 load_dotenv()
 
 # Cấu hình logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Lấy đường dẫn gốc của dự án
@@ -37,6 +39,20 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Kết nối SQLite
 DATABASE = os.path.join(BASE_DIR, "mvp50cc.db")
+IMAGE_UPLOAD_DIR = os.path.join(BASE_DIR, "frontend", "static", "images")
+
+if not os.path.exists(IMAGE_UPLOAD_DIR):
+    os.makedirs(IMAGE_UPLOAD_DIR)
+
+# Thông tin ngân hàng cố định
+BANK_INFO = {
+    "bank_name": "Vietcombank",  # Thay bằng tên ngân hàng của bạn
+    "account_number": "1234567890",  # Thay bằng số tài khoản của bạn
+    "account_holder": "Nguyen Van A"  # Thay bằng tên người thụ hưởng
+}
+
+# Email admin để nhận thông báo
+ADMIN_EMAIL = "admin@example.com"  # Thay bằng email admin thực tế
 
 def get_db():
     try:
@@ -51,8 +67,6 @@ def init_db():
     try:
         with get_db() as conn:
             cursor = conn.cursor()
-
-            # Tạo bảng users
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,18 +76,14 @@ def init_db():
                     last_maintenance_date TEXT
                 )
             """)
-            # Thêm cột mobile nếu chưa có
             try:
                 cursor.execute("SELECT mobile FROM users LIMIT 1")
             except sqlite3.OperationalError:
                 cursor.execute("ALTER TABLE users ADD COLUMN mobile TEXT")
-            # Thêm cột location nếu chưa có
             try:
                 cursor.execute("SELECT location FROM users LIMIT 1")
             except sqlite3.OperationalError:
                 cursor.execute("ALTER TABLE users ADD COLUMN location TEXT")
-
-            # Bảng xác thực OTP
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS otp_verifications (
                     email TEXT PRIMARY KEY,
@@ -83,14 +93,13 @@ def init_db():
                     expires_at DATETIME NOT NULL
                 )
             """)
-
-            # ✅ Thêm bảng cộng đồng tại đây
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS community_posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     title TEXT NOT NULL,
                     content TEXT NOT NULL,
+                    image TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -103,12 +112,21 @@ def init_db():
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS private_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sender_id INTEGER NOT NULL,
+                    receiver_id INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (sender_id) REFERENCES users(id),
+                    FOREIGN KEY (receiver_id) REFERENCES users(id)
+                )
+            """)
             conn.commit()
     except sqlite3.Error as e:
         logger.error(f"Lỗi khởi tạo database: {e}")
         raise HTTPException(status_code=500, detail="Khởi tạo database thất bại")
-
 
 init_db()
 
@@ -138,6 +156,15 @@ class MaintenanceBooking(BaseModel):
     user_id: int
     date: str
     bike_model: str
+    location: str
+    amount: Optional[int] = 20000
+
+class EditMaintenance(BaseModel):
+    user_id: int
+    booking_id: int
+    date: str
+    bike_model: str
+    location: str
 
 class AddBike(BaseModel):
     user_id: int
@@ -177,14 +204,24 @@ class PostCreate(BaseModel):
 class CommentCreate(BaseModel):
     post_id: int
     content: str
+
+class PrivateMessageCreate(BaseModel):
+    receiver_id: int
+    content: str
+
+class RefreshTokenRequest(BaseModel):
+    email: str
+    password: str
+
 async def get_current_user(request: Request):
     token = request.cookies.get("access_token")
+    logger.debug(f"Received token: {token}")
     if token:
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             user_id = payload.get("sub")
             if not user_id or not user_id.isdigit():
-                logger.warning("Invalid user_id in token")
+                logger.warning("Invalid user_id in token payload")
                 return None
             with get_db() as conn:
                 cursor = conn.cursor()
@@ -193,42 +230,69 @@ async def get_current_user(request: Request):
                 if user is None:
                     logger.warning(f"No user found with id: {user_id}")
                     return None
+                logger.debug(f"Authenticated user: {user['id']} with payload: {payload}")
                 return user
         except JWTError as e:
-            logger.warning(f"JWT error: {e}")
+            logger.warning(f"JWT decoding error: {e}")
             return None
+    logger.debug("No token found in request")
     return None
-#community
+
+# Community endpoints
 @app.post("/api/community/post")
-async def create_post(post: PostCreate, user: Optional[sqlite3.Row] = Depends(get_current_user)):
-    if not user:
-        raise HTTPException(status_code=401, detail="Chưa đăng nhập")
+async def create_post(title: str = Form(...), content: str = Form(...), image: UploadFile = File(None), current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để đăng bài")
+    if not title.strip() or not content.strip():
+        raise HTTPException(status_code=400, detail="Tiêu đề và nội dung không được để trống")
+    image_path = None
+    if image:
+        file_extension = image.filename.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        image_path = os.path.join(IMAGE_UPLOAD_DIR, unique_filename)
+        with open(image_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        image_path = f"/static/images/{unique_filename}"
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO community_posts (user_id, title, content) VALUES (?, ?, ?)",
-                       (user["id"], post.title, post.content))
+        cursor.execute("INSERT INTO community_posts (user_id, title, content, image) VALUES (?, ?, ?, ?)",
+                       (current_user["id"], title.strip(), content.strip(), image_path))
         conn.commit()
-    return {"message": "Đăng bài thành công"}
+    logger.info(f"Post created with ID {cursor.lastrowid} by user {current_user['id']}")
+    return {"message": "Đăng bài thành công", "post_id": cursor.lastrowid}
+
 @app.post("/api/community/comment")
-async def add_comment(comment: CommentCreate, user: Optional[sqlite3.Row] = Depends(get_current_user)):
-    if not user:
-        raise HTTPException(status_code=401, detail="Chưa đăng nhập")
+async def add_comment(post_id: int = Form(...), content: str = Form(...), current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để bình luận")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Nội dung bình luận không được để trống")
     with get_db() as conn:
         cursor = conn.cursor()
+        cursor.execute("SELECT id FROM community_posts WHERE id = ?", (post_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Bài viết không tồn tại")
         cursor.execute("INSERT INTO community_comments (post_id, user_id, content) VALUES (?, ?, ?)",
-                       (comment.post_id, user["id"], comment.content))
+                       (post_id, current_user["id"], content.strip()))
         conn.commit()
+    logger.info(f"Comment added to post {post_id} by user {current_user['id']}")
     return {"message": "Bình luận thành công"}
+
 @app.get("/api/community/posts")
-async def get_posts():
+async def get_posts(user_id: Optional[int] = None):
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT p.id, p.title, p.content, p.created_at, u.fullName AS author 
+        query = """
+            SELECT p.id, p.user_id, p.title, p.content, p.image, p.created_at, u.fullName AS author 
             FROM community_posts p
             JOIN users u ON p.user_id = u.id
-            ORDER BY p.created_at DESC
-        """)
+        """
+        params = []
+        if user_id:
+            query += " WHERE p.user_id = ?"
+            params.append(user_id)
+        query += " ORDER BY p.created_at DESC"
+        cursor.execute(query, params)
         posts = [dict(row) for row in cursor.fetchall()]
         for post in posts:
             cursor.execute("""
@@ -239,7 +303,125 @@ async def get_posts():
                 ORDER BY c.created_at ASC
             """, (post["id"],))
             post["comments"] = [dict(c) for c in cursor.fetchall()]
+        logger.debug(f"Retrieved {len(posts)} posts")
         return {"posts": posts}
+
+@app.delete("/api/community/post/{post_id}")
+async def delete_post(post_id: int, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để xóa bài")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, user_id FROM community_posts WHERE id = ?", (post_id,))
+        post = cursor.fetchone()
+        if not post:
+            raise HTTPException(status_code=404, detail="Bài viết không tồn tại")
+        if post["user_id"] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Bạn không có quyền xóa bài viết này")
+        cursor.execute("DELETE FROM community_comments WHERE post_id = ?", (post_id,))
+        cursor.execute("DELETE FROM community_posts WHERE id = ?", (post_id,))
+        conn.commit()
+    logger.info(f"Post {post_id} deleted by user {current_user['id']}")
+    return {"message": "Xóa bài viết thành công"}
+
+@app.put("/api/community/post/{post_id}")
+async def edit_post(post_id: int, title: str = Form(...), content: str = Form(...), image: UploadFile = File(None), current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để chỉnh sửa bài")
+    if not title.strip() or not content.strip():
+        raise HTTPException(status_code=400, detail="Tiêu đề và nội dung không được để trống")
+    image_path = None
+    if image:
+        file_extension = image.filename.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        image_path = os.path.join(IMAGE_UPLOAD_DIR, unique_filename)
+        with open(image_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        image_path = f"/static/images/{unique_filename}"
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM community_posts WHERE id = ?", (post_id,))
+        post_data = cursor.fetchone()
+        if not post_data:
+            raise HTTPException(status_code=404, detail="Bài viết không tồn tại")
+        if post_data["user_id"] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa bài viết này")
+        cursor.execute(
+            "UPDATE community_posts SET title = ?, content = ?, image = ? WHERE id = ?",
+            (title.strip(), content.strip(), image_path, post_id)
+        )
+        conn.commit()
+    logger.info(f"Post {post_id} edited by user {current_user['id']}")
+    return {"message": "Chỉnh sửa bài viết thành công"}
+
+# Private messaging endpoints
+@app.post("/api/private_message")
+async def send_private_message(message: PrivateMessageCreate, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để gửi tin nhắn")
+    if not message.content.strip():
+        raise HTTPException(status_code=400, detail="Nội dung tin nhắn không được để trống")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE id = ?", (message.receiver_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Người nhận không tồn tại")
+        cursor.execute(
+            "INSERT INTO private_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
+            (current_user["id"], message.receiver_id, message.content.strip())
+        )
+        conn.commit()
+    logger.info(f"Private message sent from user {current_user['id']} to user {message.receiver_id}")
+    return {"message": "Gửi tin nhắn thành công"}
+
+@app.get("/api/private_messages")
+async def get_private_messages(receiver_id: int, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để xem tin nhắn")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE id = ?", (receiver_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Người nhận không tồn tại")
+        cursor.execute("""
+            SELECT pm.id, pm.sender_id, pm.receiver_id, pm.content, pm.created_at, u.fullName AS sender_name
+            FROM private_messages pm
+            JOIN users u ON pm.sender_id = u.id
+            WHERE (pm.sender_id = ? AND pm.receiver_id = ?) OR (pm.sender_id = ? AND pm.receiver_id = ?)
+            ORDER BY pm.created_at ASC
+        """, (current_user["id"], receiver_id, receiver_id, current_user["id"]))
+        messages = [dict(row) for row in cursor.fetchall()]
+        logger.debug(f"Retrieved {len(messages)} messages between user {current_user['id']} and {receiver_id}")
+        return {"messages": messages}
+
+@app.get("/api/users")
+async def get_users():
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, fullName FROM users")
+        users = [dict(row) for row in cursor.fetchall()]
+        logger.debug(f"Retrieved {len(users)} users")
+        return {"users": users}
+
+# Refresh token endpoint
+@app.post("/api/auth/refresh")
+async def refresh_token(refresh_request: RefreshTokenRequest, response: Response):
+    logger.info(f"Refresh token request for email: {refresh_request.email}")
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, password FROM users WHERE email = ?", (refresh_request.email,))
+            db_user = cursor.fetchone()
+            if not db_user or not db_user["password"] or not verify_password(refresh_request.password, db_user["password"]):
+                raise HTTPException(status_code=400, detail="Email hoặc mật khẩu không đúng")
+            
+            access_token = create_access_token(data={"sub": str(db_user["id"])}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False)
+            logger.info(f"Token refreshed for user {db_user['id']}")
+            return {"message": "Token đã được làm mới", "token": access_token}
+    except sqlite3.Error as e:
+        logger.error(f"Lỗi database khi làm mới token: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi làm mới token")
 
 # Cấu hình JWT và SMTP
 SECRET_KEY = os.getenv("SECRET_KEY", "your_secure_random_secret_key")
@@ -247,7 +429,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "902578496557-k0kq281u6g8rv87dk
 SMTP_USER = os.getenv("SMTP_USER", "mintatran.01012003@gmail.com")
 SMTP_PASS = os.getenv("SMTP_PASS", "fowv uqjv dewq vbzw")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -257,6 +439,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    logger.debug(f"Created token with expiry: {expire.strftime('%Y-%m-%d %H:%M:%S')}")
     return encoded_jwt
 
 def verify_password(plain_password, hashed_password):
@@ -279,6 +462,29 @@ def send_otp_email(email: str, otp: str):
     except Exception as e:
         logger.error(f"Lỗi gửi email OTP: {e}")
         raise HTTPException(status_code=500, detail="Gửi email OTP thất bại")
+
+def send_payment_notification_email(booking_id: int, user_id: int, user_email: str, booking: dict):
+    try:
+        msg = MIMEText(
+            f"Người dùng {user_email} (ID: {user_id}) đã báo cáo hoàn tất thanh toán cho lịch bảo dưỡng:\n\n"
+            f"Mã lịch bảo dưỡng: {booking_id}\n"
+            f"Ngày: {booking['date']}\n"
+            f"Xe: {booking['bike_model']}\n"
+            f"Địa điểm: {booking['location']}\n"
+            f"Số tiền: {booking.get('amount', 20000)} VND\n\n"
+            f"Vui lòng kiểm tra giao dịch ngân hàng và xác nhận thanh toán qua API /api/confirm_payment."
+        )
+        msg['Subject'] = f'Thông báo thanh toán từ MotoHub - Booking ID {booking_id}'
+        msg['From'] = SMTP_USER
+        msg['To'] = ADMIN_EMAIL
+
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        logger.info(f"Gửi thông báo thanh toán đến admin {ADMIN_EMAIL} cho booking_id {booking_id}")
+    except Exception as e:
+        logger.error(f"Lỗi gửi email thông báo thanh toán: {e}")
+        raise HTTPException(status_code=500, detail="Gửi email thông báo thất bại")
 
 def generate_otp():
     return str(random.randint(100000, 999999))
@@ -346,7 +552,7 @@ async def verify_otp(otp_verify: OTPVerify, response: Response):
             conn.commit()
             
             access_token = create_access_token(data={"sub": str(user_id)}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True)
+            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False)
             logger.info(f"Xác minh OTP và đăng ký thành công, user_id: {user_id}")
             return {"message": "Đăng ký thành công", "token": access_token}
     except sqlite3.Error as e:
@@ -376,7 +582,7 @@ async def google_login(google: GoogleLogin, response: Response):
                 user_id = db_user['id']
             
             access_token = create_access_token(data={"sub": str(user_id)}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True)
+            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False)
             logger.info(f"Đăng nhập/đăng ký Google thành công, user_id: {user_id}")
             return {"message": "Đăng nhập/đăng ký Google thành công", "token": access_token}
     except ValueError as e:
@@ -394,11 +600,18 @@ async def login(user: UserLogin, response: Response):
             cursor = conn.cursor()
             cursor.execute("SELECT id, password FROM users WHERE email = ?", (user.email,))
             db_user = cursor.fetchone()
-            if not db_user or not db_user["password"] or not verify_password(user.password, db_user["password"]):
+            if not db_user:
+                logger.warning(f"No user found with email: {user.email}")
+                raise HTTPException(status_code=400, detail="Email hoặc mật khẩu không đúng")
+            if not db_user["password"]:
+                logger.warning(f"User {user.email} has no password set")
+                raise HTTPException(status_code=400, detail="Tài khoản này chưa có mật khẩu. Vui lòng đặt mật khẩu qua trang hồ sơ.")
+            if not verify_password(user.password, db_user["password"]):
+                logger.warning(f"Password verification failed for user: {user.email}")
                 raise HTTPException(status_code=400, detail="Email hoặc mật khẩu không đúng")
             
             access_token = create_access_token(data={"sub": str(db_user["id"])}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True)
+            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False)
             logger.info(f"Đăng nhập thành công, user_id: {db_user['id']}")
             return {"message": "Đăng nhập thành công", "token": access_token}
     except sqlite3.Error as e:
@@ -538,60 +751,72 @@ async def delete_bike(bike: DeleteBike):
 @app.post("/api/book_maintenance")
 async def book_maintenance(booking: MaintenanceBooking):
     file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+    logger.debug(f"Booking data received: {booking.dict()}")
+    if not booking.location or not booking.date or not booking.bike_model:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp đầy đủ thông tin (ngày, xe, địa điểm)")
     with open(file_path, "a", encoding="utf-8") as f:
-        json.dump({"user_id": booking.user_id, "date": booking.date, "bike_model": booking.bike_model}, f, ensure_ascii=False)
+        json.dump({
+            "user_id": booking.user_id,
+            "date": booking.date,
+            "bike_model": booking.bike_model,
+            "location": booking.location,
+            "payment_status": "unpaid",
+            "amount": booking.amount
+        }, f, ensure_ascii=False)
         f.write("\n")
+    logger.info(f"Successfully booked maintenance for user {booking.user_id} with location: {booking.location}")
     return {"message": "Lịch bảo dưỡng đã được đặt thành công"}
 
 @app.post("/api/update_profile")
-async def update_profile(data: dict, user: dict = Depends(get_current_user)):
+async def update_profile(user_update: UpdateUser, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Token không hợp lệ hoặc thiếu")
+    user_id = current_user["id"]
+    fullName = user_update.fullName
+    email = user_update.email
+    password = user_update.password
+    mobile = user_update.mobile
+    location = user_update.location
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE users
-                SET full_name = %s,
-                    email = %s,
-                    mobile = %s,
-                    location = %s
-                WHERE id = %s
-                """,
-                (
-                    data.get("fullName", user["full_name"]),
-                    data.get("email", user["email"]),
-                    data.get("mobile", user.get("mobile")),
-                    data.get("location", user.get("location")),
-                    user["id"]
-                )
-            )
-            conn.commit()
-    return {"message": "Cập nhật thông tin thành công!"}
-
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET fullName = ?, email = ?, password = ?, mobile = ?, location = ? WHERE id = ?",
+            (fullName, email, get_password_hash(password) if password else current_user["password"], mobile or current_user["mobile"], location or current_user["location"], user_id)
+        )
+        conn.commit()
+    return {"message": f"Đã cập nhật thông tin cho user {user_id}"}
 
 @app.post("/api/reset_password")
 async def reset_password(reset: ResetPassword):
-    user_id = reset.user_id
-    old_password = reset.old_password
-    new_password = reset.new_password
-    confirm_password = reset.confirm_password
+    logger.info(f"Nhận yêu cầu đặt lại mật khẩu cho user_id: {reset.user_id}")
+    try:
+        if reset.new_password != reset.confirm_password:
+            logger.warning("Mật khẩu mới và xác nhận không khớp")
+            raise HTTPException(status_code=400, detail="Mật khẩu mới và xác nhận không khớp")
 
-    if new_password != confirm_password:
-        raise HTTPException(status_code=400, detail="Mật khẩu mới và xác nhận mật khẩu không khớp")
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT password FROM users WHERE id = ?", (reset.user_id,))
+            db_user = cursor.fetchone()
+            if not db_user:
+                logger.warning(f"Không tìm thấy user với id: {reset.user_id}")
+                raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
 
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE id = ?", (user_id,))
-        db_user = cursor.fetchone()
-        if not db_user or not db_user["password"] or not verify_password(old_password, db_user["password"]):
-            raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng")
+            if db_user["password"] and reset.old_password and not verify_password(reset.old_password, db_user["password"]):
+                logger.warning(f"Mật khẩu cũ không đúng cho user_id: {reset.user_id}")
+                raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng")
 
-        hashed_password = get_password_hash(new_password)
-        cursor.execute(
-            "UPDATE users SET password = ? WHERE id = ?",
-            (hashed_password, user_id)
-        )
-        conn.commit()
-    return {"message": f"Đã đặt lại mật khẩu cho user {user_id}"}
+            hashed_password = get_password_hash(reset.new_password)
+            cursor.execute(
+                "UPDATE users SET password = ? WHERE id = ?",
+                (hashed_password, reset.user_id)
+            )
+            conn.commit()
+            logger.info(f"Đã đặt lại mật khẩu cho user_id: {reset.user_id}")
+            return {"message": f"Đã đặt lại mật khẩu cho user {reset.user_id}"}
+    except sqlite3.Error as e:
+        logger.error(f"Lỗi database khi đặt lại mật khẩu: {e}")
+        raise HTTPException(status_code=500, detail="Đặt lại mật khẩu thất bại do lỗi database")
 
 @app.get("/api/vehicles")
 async def get_vehicles():
@@ -600,7 +825,7 @@ async def get_vehicles():
         with open(vehicles_file, "r", encoding="utf-8") as f:
             try:
                 vehicles = json.load(f)
-                return {"vehicles": vehicles}  # Trả về dictionary trực tiếp
+                return {"vehicles": vehicles}
             except json.JSONDecodeError:
                 raise HTTPException(status_code=500, detail="Lỗi đọc file vehicles.json")
     else:
@@ -634,11 +859,13 @@ async def get_maintenance_history(user_id: int):
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read().strip().splitlines()
-                for line in content:
+                for index, line in enumerate(content):
                     if line.strip():
                         booking = json.loads(line)
                         if str(booking.get("user_id")) == str(user_id):
+                            booking["id"] = index
                             history.append(booking)
+        logger.debug(f"Maintenance history for user {user_id}: {history}")
         return {"history": history}
     except json.JSONDecodeError as e:
         logger.error(f"Lỗi cú pháp JSON trong maintenance_bookings.json: {e}")
@@ -646,6 +873,192 @@ async def get_maintenance_history(user_id: int):
     except Exception as e:
         logger.error(f"Lỗi khi lấy lịch sử bảo dưỡng: {e}")
         raise HTTPException(status_code=500, detail="Không thể lấy lịch sử bảo dưỡng")
+
+@app.delete("/api/delete_maintenance")
+async def delete_maintenance(user_id: int, booking_id: int):
+    file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+    logger.debug(f"Attempting to delete booking {booking_id} for user {user_id}")
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user_id):
+                del bookings[booking_id]
+                with open(file_path, "w", encoding="utf-8") as f:
+                    for booking in bookings:
+                        json.dump(booking, f, ensure_ascii=False)
+                        f.write("\n")
+                logger.info(f"Successfully deleted booking {booking_id} for user {user_id}")
+                return {"message": "Đã xóa lịch đặt xe thành công"}
+            logger.warning(f"Booking {booking_id} not found or does not belong to user {user_id}")
+            raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
+    except Exception as e:
+        logger.error(f"Error deleting maintenance booking: {e}")
+        raise HTTPException(status_code=500, detail="Không thể xóa lịch đặt xe")
+
+@app.post("/api/edit_maintenance")
+async def edit_maintenance(edit: EditMaintenance):
+    file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+    logger.debug(f"Attempting to edit booking {edit.booking_id} for user {edit.user_id} with data: {edit.dict()}")
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= edit.booking_id < len(bookings) and str(bookings[edit.booking_id].get("user_id")) == str(edit.user_id):
+                bookings[edit.booking_id]["date"] = edit.date
+                bookings[edit.booking_id]["bike_model"] = edit.bike_model
+                bookings[edit.booking_id]["location"] = edit.location
+                with open(file_path, "w", encoding="utf-8") as f:
+                    for booking in bookings:
+                        json.dump(booking, f, ensure_ascii=False)
+                        f.write("\n")
+                logger.info(f"Successfully edited booking {edit.booking_id} for user {edit.user_id}")
+                return {"message": "Đã chỉnh sửa lịch đặt xe thành công"}
+            logger.warning(f"Booking {edit.booking_id} not found or does not belong to user {edit.user_id}")
+            raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
+    except Exception as e:
+        logger.error(f"Error editing maintenance booking: {e}")
+        raise HTTPException(status_code=500, detail="Không thể chỉnh sửa lịch đặt xe")
+
+@app.post("/api/confirm_payment")
+async def confirm_payment(data: dict):
+    booking_id = data.get("booking_id")
+    user_id = data.get("user_id")
+    logger.debug(f"Admin confirming payment for booking_id {booking_id}, user_id {user_id}")
+    
+    try:
+        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user_id):
+                if bookings[booking_id]["payment_status"] == "paid":
+                    logger.warning(f"Booking {booking_id} already paid")
+                    raise HTTPException(status_code=400, detail="Lịch đặt xe đã được thanh toán")
+                bookings[booking_id]["payment_status"] = "paid"
+                with open(file_path, "w", encoding="utf-8") as f:
+                    for booking in bookings:
+                        json.dump(booking, f, ensure_ascii=False)
+                        f.write("\n")
+                logger.info(f"Payment confirmed for booking_id {booking_id}")
+                return {"message": "Xác nhận thanh toán thành công"}
+            else:
+                logger.error(f"Booking {booking_id} not found or does not belong to user {user_id}")
+                raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
+        else:
+            logger.error(f"Maintenance bookings file not found at {file_path}")
+            raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu lịch đặt xe")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
+    except Exception as e:
+        logger.error(f"Error confirming payment: {e}")
+        raise HTTPException(status_code=500, detail="Không thể xác nhận thanh toán")
+
+@app.get("/api/check_payment_status")
+async def check_payment_status(booking_id: int, user_id: int):
+    logger.debug(f"Checking payment status for booking_id {booking_id}, user_id {user_id}")
+    try:
+        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user_id):
+                return {"payment_status": bookings[booking_id]["payment_status"]}
+            else:
+                logger.error(f"Booking {booking_id} not found or does not belong to user {user_id}")
+                raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
+        else:
+            logger.error(f"Maintenance bookings file not found at {file_path}")
+            raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu lịch đặt xe")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
+    except Exception as e:
+        logger.error(f"Error checking payment status: {e}")
+        raise HTTPException(status_code=500, detail="Không thể kiểm tra trạng thái thanh toán")
+
+@app.post("/api/notify_payment")
+async def notify_payment(data: dict, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để thông báo thanh toán")
+    booking_id = data.get("booking_id")
+    user_id = data.get("user_id")
+    logger.debug(f"User {user_id} notifying payment for booking_id {booking_id}")
+    
+    try:
+        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user_id):
+                booking = bookings[booking_id]
+                if booking["payment_status"] == "paid":
+                    logger.warning(f"Booking {booking_id} already paid")
+                    raise HTTPException(status_code=400, detail="Lịch đặt xe đã được thanh toán")
+                send_payment_notification_email(booking_id, user_id, current_user["email"], booking)
+                logger.info(f"Payment notification sent for booking_id {booking_id}")
+                return {"message": "Thông báo thanh toán đã được gửi đến admin"}
+            else:
+                logger.error(f"Booking {booking_id} not found or does not belong to user {user_id}")
+                raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
+        else:
+            logger.error(f"Maintenance bookings file not found at {file_path}")
+            raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu lịch đặt xe")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
+    except Exception as e:
+        logger.error(f"Error sending payment notification: {e}")
+        raise HTTPException(status_code=500, detail="Không thể gửi thông báo thanh toán")
+
+@app.get("/payment/{booking_id}", response_class=HTMLResponse)
+async def payment_page(request: Request, booking_id: int, user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not user:
+        logger.warning("User not authenticated, redirecting to login")
+        return RedirectResponse(url="/login")
+    
+    try:
+        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        logger.debug(f"Attempting to load maintenance bookings from {file_path} for booking_id {booking_id}")
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user["id"]):
+                booking = bookings[booking_id]
+                booking["id"] = booking_id
+                logger.info(f"Rendering payment page for booking_id {booking_id}, user_id {user['id']}")
+                return templates.TemplateResponse("payment.html", {
+                    "request": request,
+                    "user": user,
+                    "booking": booking,
+                    "booking_id": booking_id,
+                    "amount": booking.get("amount", 20000)
+                })
+            else:
+                logger.error(f"Booking {booking_id} not found or does not belong to user {user['id']}")
+                raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
+        else:
+            logger.error(f"Maintenance bookings file not found at {file_path}")
+            raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu lịch đặt xe")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
+    except Exception as e:
+        logger.error(f"Error loading payment page for booking_id {booking_id}: {e}")
+        raise HTTPException(status_code=500, detail="Không thể lấy thông tin thanh toán")
 
 # Web routes
 @app.get("/", response_class=HTMLResponse)
@@ -702,7 +1115,7 @@ async def maintenance_page(request: Request, user: Optional[sqlite3.Row] = Depen
 async def search_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
     if not user:
         return RedirectResponse(url="/login")
-    vehicles_data = await get_vehicles()  # Lấy dữ liệu trực tiếp từ get_vehicles
+    vehicles_data = await get_vehicles()
     return templates.TemplateResponse("search.html", {"request": request, "user": user, "vehicles": vehicles_data["vehicles"]})
 
 @app.get("/custom3d", response_class=HTMLResponse)
@@ -727,7 +1140,6 @@ async def promotion_page(request: Request, user: Optional[sqlite3.Row] = Depends
 async def instruction_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
     if not user:
         return RedirectResponse(url="/login")
-    # Dữ liệu hướng dẫn chi tiết cho người dùng, không cần hình ảnh
     guides = [
         {
             "title": "Cách tìm kiếm xe trên Moto50Hub",
@@ -735,7 +1147,7 @@ async def instruction_page(request: Request, user: Optional[sqlite3.Row] = Depen
         },
         {
             "title": "Cách đặt lịch bảo trì",
-            "content": "1. Chọn 'Đặt lịch chăm sóc xe' từ trang chính.<br>2. Chọn ngày bảo trì mong muốn và mô hình xe bạn sở hữu.<br>3. Xác nhận đặt lịch, hệ thống sẽ ghi nhận và gửi thông báo qua email.<br><strong>Lưu ý:</strong> Kiểm tra lịch sử bảo trì trong mục 'Đặt lịch chăm sóc xe' để biết thời gian tiếp theo."
+            "content": "1. Chọn 'Đặt lịch chăm sóc xe' từ trang chính.<br>2. Chọn ngày bảo trì mong muốn, mô hình xe và địa điểm.<br>3. Xác nhận đặt lịch, hệ thống sẽ ghi nhận và gửi thông báo qua email.<br><strong>Lưu ý:</strong> Kiểm tra lịch sử bảo trì trong mục 'Đặt lịch chăm sóc xe' để biết thời gian tiếp theo."
         },
         {
             "title": "Cách tùy chỉnh xe 3D",
