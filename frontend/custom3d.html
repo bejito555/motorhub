@@ -1,69 +1,495 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Custom 3D - Moto50Hub</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tùy chỉnh 3D</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #0d1117, #1f2937);
+      margin: 0;
+      overflow-x: hidden;
+      color: #fff;
+    }
+    #canvas3d {
+      width: 100%;
+      height: 700px;
+      display: block;
+      border-radius: 1rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      background: #000;
+    }
+    .custom-modal {
+      background: rgba(17, 24, 39, 0.95);
+      border: 2px solid #ef4444;
+      transition: all 0.3s ease;
+      transform: translateY(-20px);
+      opacity: 0;
+    }
+    .custom-modal.open {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .tab-button {
+      transition: all 0.2s ease;
+    }
+    .tab-button.active {
+      background: #ef4444;
+      color: #fff;
+    }
+    .loading-spinner {
+      border: 6px solid #ffffff20;
+      border-top: 6px solid #ef4444;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    @keyframes spin {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .neon-glow {
+      box-shadow: 0 0 10px #ef4444, 0 0 20px #ef4444;
+    }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <nav class="bg-white shadow-md py-4 fixed w-full z-10">
-        <div class="container mx-auto flex justify-between items-center px-6">
-            <a href="/dashboard" class="flex items-center">
-                <img src="/static/motorhub-1.png" alt="Moto50Hub Logo" class="h-12 mr-2">
-                <span class="text-xl font-semibold text-gray-800">☰</span>
-            </a>
-            <div class="space-x-6">
-                <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Dashboard</a>
-                {% if user %}
-                    <a href="/api/auth/logout" class="text-gray-600 hover:text-red-600 text-lg" onclick="logout(event)">Log out</a>
-                {% else %}
-                    <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Sign in</a>
-                {% endif %}
-            </div>
-        </div>
-    </nav>
-
-    <div class="pt-20 pb-12">
-        <div class="container mx-auto p-6">
-            <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Custom 3D</h1>
-            <p class="text-center text-gray-600">Tính năng đang được nâng cấp. Vui lòng quay lại sau!</p>
-        </div>
+<body class="min-h-screen">
+  <!-- Navbar -->
+  <nav class="bg-gray-900 shadow-lg py-4 fixed w-full z-20">
+    <div class="container mx-auto flex justify-between items-center px-6">
+      <a href="/" class="flex items-center space-x-2">
+        <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12">
+        <span class="text-2xl font-bold text-white hover:text-red-500">MotoHub</span>
+      </a>
+      <div class="flex space-x-6 items-center">
+        <a href="/" class="text-gray-300 hover:text-red-500 text-lg font-medium">Trang chủ</a>
+        <a href="/search" class="text-gray-300 hover:text-red-500 text-lg font-medium">Tìm kiếm</a>
+        {% if not user %}
+          <a href="/login" class="text-gray-300 hover:text-red-500 text-lg font-medium">Đăng nhập</a>
+        {% else %}
+          <a href="/dashboard" class="text-gray-300 hover:text-red-500 text-lg font-medium">Trang chính</a>
+          <a href="/api/auth/logout" class="text-gray-300 hover:text-red-500 text-lg font-medium" onclick="dangXuat(event)">Đăng xuất</a>
+        {% endif %}
+      </div>
     </div>
+  </nav>
 
-    <footer class="bg-gray-800 text-white py-8">
-        <div class="container mx-auto text-center">
+  <!-- Nội dung chính -->
+  <div class="pt-24 pb-12">
+    <div class="container mx-auto px-6">
+      <h1 class="text-5xl font-bold text-center mb-4">Tùy chỉnh 3D</h1>
+      <p class="text-center text-gray-400 mb-8 text-lg">Thiết kế xe theo phong cách của bạn!</p>
+      <!-- Bảng điều khiển tùy chỉnh -->
+      <div class="flex justify-center mb-8">
+        <div class="custom-modal p-6 rounded-xl w-full max-w-md open">
+          <div class="flex space-x-2 mb-4">
+            <button onclick="showTab('paint')" class="tab-button flex-1 p-2 bg-gray-700 rounded text-white hover:bg-red-500 active">Sơn</button>
+            <button onclick="showTab('components')" class="tab-button flex-1 p-2 bg-gray-700 rounded text-white hover:bg-red-500">Linh kiện</button>
+            <button onclick="showTab('lighting')" class="tab-button flex-1 p-2 bg-gray-700 rounded text-white hover:bg-red-500">Ánh sáng</button>
+            <button onclick="showTab('effects')" class="tab-button flex-1 p-2 bg-gray-700 rounded text-white hover:bg-red-500">Hiệu ứng</button>
+          </div>
+          <!-- Tab Sơn -->
+          <div id="paint" class="tab-content">
             <div class="mb-4">
-                <img src="/static/motorhub-1.png" alt="Moto50Hub Logo" class="h-12 mx-auto mb-4">
-                <p class="text-sm">Resources | Freebies | YouTube Podcast</p>
+              <label class="block text-gray-300 mb-2">Bộ phận:</label>
+              <select id="partSelect" class="w-full p-2 bg-gray-700 text-white rounded focus:ring-2 focus:ring-red-500">
+                <option value="body">Thân xe</option>
+                <option value="wheels">Bánh xe</option>
+                <option value="glass">Kính</option>
+                <option value="lights">Đèn</option>
+              </select>
             </div>
             <div class="mb-4">
-                <p><strong>Liên hệ:</strong> 0909 123 456 | support@moto50hub.com</p>
-                <p><strong>Địa chỉ:</strong> 123 Đường Lê Lợi, Quận 1, TP.HCM</p>
+              <label class="block text-gray-300 mb-2">Màu sơn:</label>
+              <div class="grid grid-cols-4 gap-2">
+                <button onclick="changeColor(0xff0000)" class="w-10 h-10 bg-red-500 rounded-full hover:scale-110 transition neon-glow"></button>
+                <button onclick="changeColor(0x00ff00)" class="w-10 h-10 bg-green-500 rounded-full hover:scale-110 transition neon-glow"></button>
+                <button onclick="changeColor(0x0000ff)" class="w-10 h-10 bg-blue-500 rounded-full hover:scale-110 transition neon-glow"></button>
+                <button onclick="changeColor(0xffffff)" class="w-10 h-10 bg-white border rounded-full hover:scale-110 transition neon-glow"></button>
+              </div>
             </div>
-            <div class="space-x-4 mb-4">
-                <a href="#" class="text-gray-400 hover:text-white">Facebook</a>
-                <a href="#" class="text-gray-400 hover:text-white">YouTube</a>
-                <a href="#" class="text-gray-400 hover:text-white">Zalo</a>
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Độ bóng: <span id="glossValue">0.5</span></label>
+              <input type="range" id="glossSlider" min="0" max="1" step="0.1" value="0.5" class="w-full" oninput="updatePaint()">
             </div>
-            <div class="text-sm">
-                <a href="/privacy" class="text-gray-400 hover:text-white mr-2">Chính sách bảo mật</a>
-                <a href="/terms" class="text-gray-400 hover:text-white">Điều khoản sử dụng</a>
+          </div>
+          <!-- Tab Linh kiện -->
+          <div id="components" class="tab-content hidden">
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Bánh xe:</label>
+              <select id="wheelsSelect" onchange="changeComponent('wheels', this.value)" class="w-full p-2 bg-gray-700 text-white rounded focus:ring-2 focus:ring-red-500">
+                <option value="/static/models/base.obj">Mặc định</option>
+                <option value="/static/models/wheels_sport.obj">Thể thao</option>
+                <option value="/static/models/wheels_offroad.obj">Offroad</option>
+                <option value="/static/models/wheels_classic.obj">Cổ điển</option>
+                <option value="/static/models/wheels_lowrider.obj">Lowrider</option>
+              </select>
             </div>
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Spoiler:</label>
+              <select id="spoilerSelect" onchange="changeComponent('spoiler', this.value)" class="w-full p-2 bg-gray-700 text-white rounded focus:ring-2 focus:ring-red-500">
+                <option value="">Không có</option>
+                <option value="/static/models/spoiler_race.obj">Đua</option>
+                <option value="/static/models/spoiler_drift.obj">Drift</option>
+                <option value="/static/models/spoiler_low.obj">Thấp</option>
+              </select>
+            </div>
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Body kit:</label>
+              <select id="bodykitSelect" onchange="changeComponent('bodykit', this.value)" class="w-full p-2 bg-gray-700 text-white rounded focus:ring-2 focus:ring-red-500">
+                <option value="">Không có</option>
+                <option value="/static/models/bodykit_low.obj">Hạ thấp</option>
+                <option value="/static/models/bodykit_wide.obj">Rộng</option>
+                <option value="/static/models/bodykit_aero.obj">Khí động học</option>
+              </select>
+            </div>
+          </div>
+          <!-- Tab Ánh sáng -->
+          <div id="lighting" class="tab-content hidden">
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Màu ánh sáng:</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="changeLightColor(0xffffff)" class="w-10 h-10 bg-white border rounded-full hover:scale-110 transition neon-glow"></button>
+                <button onclick="changeLightColor(0xffff00)" class="w-10 h-10 bg-yellow-500 rounded-full hover:scale-110 transition neon-glow"></button>
+                <button onclick="changeLightColor(0x00ff00)" class="w-10 h-10 bg-green-500 rounded-full hover:scale-110 transition neon-glow"></button>
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Đèn neon dưới gầm:</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="addNeon(0xff0000)" class="w-10 h-10 bg-red-500 rounded-full hover:scale-110 transition neon-glow"></button>
+                <button onclick="addNeon(0x00ff00)" class="w-10 h-10 bg-green-500 rounded-full hover:scale-110 transition neon-glow"></button>
+                <button onclick="addNeon(0x0000ff)" class="w-10 h-10 bg-blue-500 rounded-full hover:scale-110 transition neon-glow"></button>
+              </div>
+            </div>
+          </div>
+          <!-- Tab Hiệu ứng -->
+          <div id="effects" class="tab-content hidden">
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Khói ống pô:</label>
+              <button onclick="toggleExhaustSmoke()" class="w-full p-2 bg-red-500 text-white rounded hover:bg-red-600 transition">Bật/Tắt khói</button>
+            </div>
+            <div class="mb-4">
+              <label class="block text-gray-300 mb-2">Tint kính: <span id="tintValue">0.5</span></label>
+              <input type="range" id="tintSlider" min="0" max="1" step="0.1" value="0.5" class="w-full" oninput="updateTint()">
+            </div>
+          </div>
+          <!-- Lưu và tải -->
+          <div class="flex space-x-2 mt-4">
+            <button onclick="saveConfig()" class="w-full p-2 bg-green-500 text-white rounded hover:bg-green-600 transition neon-glow">Lưu thiết kế</button>
+            <button onclick="loadConfig()" class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition neon-glow">Tải thiết kế</button>
+          </div>
         </div>
-    </footer>
+      </div>
+      <!-- Canvas và loading -->
+      <div class="relative">
+        <canvas id="canvas3d"></canvas>
+        <div id="loadingSpinner" class="loading-spinner hidden"></div>
+      </div>
+    </div>
+  </div>
 
-    <script>
-        function logout(event) {
-            event.preventDefault();
-            fetch('/api/auth/logout', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    localStorage.removeItem('token');
-                    window.location.href = '/';
-                })
-                .catch(error => console.error('Logout error:', error));
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-white py-8">
+    <div class="container mx-auto text-center">
+      <div class="mb-4">
+        <img src="/static/motorhub-1.png" alt="Logo Moto50Hub" class="h-12 mx-auto mb-4">
+      </div>
+      <div class="mb-4">
+        <p><strong>Liên hệ:</strong> 0906600710 | motohub@gmail.com</p>
+        <p><strong>Địa chỉ:</strong> 7 Đ. D1, Long Thạnh Mỹ, Thủ Đức, Vietnam</p>
+      </div>
+      <div class="space-x-4 mb-4">
+        <a href="https://www.facebook.com/profile.php?id=61576891661221" class="text-gray-400 hover:text-red-500" target="_blank">Facebook</a>
+        <a href="#" class="text-gray-400 hover:text-red-500">YouTube</a>
+        <a href="https://www.instagram.com/moto.hub201/" class="text-gray-400 hover:text-red-500" target="_blank">Instagram</a>
+      </div>
+      <div class="text-sm">
+        <a href="/privacy" class="text-gray-400 hover:text-red-500 mr-2">Chính sách bảo mật</a>
+        <a href="/terms" class="text-gray-400 hover:text-red-500">Điều khoản sử dụng</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const canvas = document.getElementById('canvas3d');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    controls.minDistance = 1;
+    controls.maxDistance = 10;
+
+    // Ánh sáng
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(3, 3, 3).normalize();
+    scene.add(directionalLight);
+
+    let carModel, components = { wheels: null, spoiler: null, bodykit: null }, neonLights = [], smokeParticles;
+    const loader = new THREE.OBJLoader();
+
+    // Tải mô hình
+    function loadModel(path, callback, sourcePath) {
+      loadingSpinner.classList.remove('hidden');
+      loader.load(path, function (object) {
+        const box = new THREE.Box3().setFromObject(object);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 2 / maxDim;
+        object.scale.set(scale, scale, scale);
+        object.position.sub(center.multiplyScalar(scale));
+        object.sourcePath = sourcePath;
+
+        object.traverse(function (child) {
+          if (child.isMesh) {
+            const name = child.name.toLowerCase();
+            if (name.includes('wheel')) child.userData.part = 'wheels';
+            else if (name.includes('glass')) child.userData.part = 'glass';
+            else if (name.includes('light')) child.userData.part = 'lights';
+            else if (name.includes('exhaust')) child.userData.part = 'exhaust';
+            else child.userData.part = 'body';
+
+            child.material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+            if (child.userData.part === 'glass') {
+              child.material.transparent = true;
+              child.material.opacity = 0.5;
+            }
+          }
+        });
+
+        // Căn chỉnh vị trí linh kiện
+        if (sourcePath.includes('wheels')) object.position.y = -0.5;
+        else if (sourcePath.includes('spoiler')) object.position.set(0, 0.8, -0.5);
+        else if (sourcePath.includes('bodykit')) object.position.y = -0.3;
+
+        callback(object);
+        loadingSpinner.classList.add('hidden');
+      }, undefined, function (error) {
+        console.error('Lỗi khi tải mô hình:', error);
+        loadingSpinner.classList.add('hidden');
+      });
+    }
+
+    loadModel('/static/models/base.obj', function (object) {
+      carModel = object;
+      components.wheels = object;
+      scene.add(carModel);
+    }, '/static/models/base.obj');
+
+    // Quản lý tab
+    function showTab(tab) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+      document.getElementById(tab).classList.remove('hidden');
+      document.querySelector(`button[onclick="showTab('${tab}')"]`).classList.add('active');
+    }
+
+    // Thay đổi màu
+    function changeColor(color) {
+      const part = document.getElementById('partSelect').value;
+      carModel.traverse(function (child) {
+        if (child.isMesh && child.userData.part === part) {
+          child.material = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: document.getElementById('glossSlider').value
+          });
+          if (child.userData.part === 'glass') {
+            child.material.transparent = true;
+            child.material.opacity = document.getElementById('tintSlider').value;
+          }
         }
-    </script>
+      });
+    }
+
+    // Cập nhật sơn
+    function updatePaint() {
+      const gloss = parseFloat(document.getElementById('glossSlider').value);
+      document.getElementById('glossValue').textContent = gloss.toFixed(1);
+      carModel.traverse(function (child) {
+        if (child.isMesh && child.userData.part === document.getElementById('partSelect').value) {
+          child.material.roughness = gloss;
+        }
+      });
+    }
+
+    // Thay linh kiện
+    function changeComponent(type, path) {
+      if (components[type] && components[type] !== carModel) scene.remove(components[type]);
+      loadModel(path, function (object) {
+        components[type] = object;
+        scene.add(object);
+        // Zoom camera vào bộ phận
+        const focusPoints = {
+          wheels: new THREE.Vector3(0, -0.5, 1),
+          spoiler: new THREE.Vector3(0, 0.8, -0.5),
+          bodykit: new THREE.Vector3(0, -0.3, 0)
+        };
+        new TWEEN.Tween(camera.position)
+          .to(focusPoints[type], 500)
+          .easing(TWEEN.Easing.Quadratic.InOut)
+          .start();
+      }, path);
+    }
+
+    // Thay đổi màu ánh sáng
+    function changeLightColor(color) {
+      ambientLight.color.set(color);
+      directionalLight.color.set(color);
+    }
+
+    // Thêm đèn neon
+    function addNeon(color) {
+      neonLights.forEach(light => scene.remove(light));
+      neonLights = [];
+      const neon = new THREE.PointLight(color, 2, 2);
+      neon.position.set(0, -0.8, 0);
+      scene.add(neon);
+      neonLights.push(neon);
+    }
+
+    // Cập nhật tint kính
+    function updateTint() {
+      const tint = parseFloat(document.getElementById('tintSlider').value);
+      document.getElementById('tintValue').textContent = tint.toFixed(1);
+      carModel.traverse(function (child) {
+        if (child.isMesh && child.userData.part === 'glass') {
+          child.material.opacity = tint;
+        }
+      });
+    }
+
+    // Hiệu ứng khói ống pô
+    function toggleExhaustSmoke() {
+      if (smokeParticles) {
+        scene.remove(smokeParticles);
+        smokeParticles = null;
+        return;
+      }
+      smokeParticles = new THREE.Group();
+      const smokeGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+      const smokeMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.3 });
+      function createSmoke() {
+        const smoke = new THREE.Mesh(smokeGeometry, smokeMaterial);
+        smoke.position.set(0, -0.5, -1);
+        smoke.userData.velocity = new THREE.Vector3(0, 0.1, -0.1);
+        smokeParticles.add(smoke);
+      }
+      setInterval(createSmoke, 100);
+      scene.add(smokeParticles);
+    }
+
+    // Lưu cấu hình
+    function saveConfig() {
+      const config = {
+        colors: {},
+        gloss: document.getElementById('glossSlider').value,
+        tint: document.getElementById('tintSlider').value,
+        components: {
+          wheels: components.wheels ? components.wheels.sourcePath : '/static/models/base.obj',
+          spoiler: components.spoiler ? components.spoiler.sourcePath : null,
+          bodykit: components.bodykit ? components.bodykit.sourcePath : null
+        },
+        lightColor: ambientLight.color.getHex(),
+        neonColor: neonLights[0] ? neonLights[0].color.getHex() : null
+      };
+      carModel.traverse(function (child) {
+        if (child.isMesh && child.material) {
+          config.colors[child.userData.part] = child.material.color.getHex();
+        }
+      });
+      localStorage.setItem('carConfig', JSON.stringify(config));
+      alert('Đã lưu thiết kế!');
+    }
+
+    // Tải cấu hình
+    function loadConfig() {
+      const config = JSON.parse(localStorage.getItem('carConfig'));
+      if (!config) return alert('Chưa có thiết kế nào được lưu!');
+
+      carModel.traverse(function (child) {
+        if (child.isMesh && config.colors[child.userData.part]) {
+          child.material = new THREE.MeshStandardMaterial({
+            color: config.colors[child.userData.part],
+            roughness: config.gloss
+          });
+          if (child.userData.part === 'glass') {
+            child.material.transparent = true;
+            child.material.opacity = config.tint;
+          }
+        }
+      });
+
+      document.getElementById('glossSlider').value = config.gloss;
+      document.getElementById('tintSlider').value = config.tint;
+      updatePaint();
+      updateTint();
+
+      if (config.components.wheels && config.components.wheels !== '/static/models/base.obj') {
+        changeComponent('wheels', config.components.wheels);
+      }
+      if (config.components.spoiler) {
+        changeComponent('spoiler', config.components.spoiler);
+      }
+      if (config.components.bodykit) {
+        changeComponent('bodykit', config.components.bodykit);
+      }
+
+      changeLightColor(config.lightColor);
+      if (config.neonColor) addNeon(config.neonColor);
+      alert('Đã tải thiết kế!');
+    }
+
+    camera.position.z = 5;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (smokeParticles) {
+        smokeParticles.children.forEach(smoke => {
+          smoke.position.add(smoke.userData.velocity);
+          smoke.material.opacity -= 0.01;
+          if (smoke.material.opacity <= 0) smokeParticles.remove(smoke);
+        });
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    });
+
+    function dangXuat(event) {
+      event.preventDefault();
+      fetch('/api/auth/logout', { method: 'POST' })
+        .then(() => {
+          localStorage.removeItem('token');
+          window.location.href = '/';
+        });
+    }
+  </script>
 </body>
 </html>
