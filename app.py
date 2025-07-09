@@ -19,6 +19,7 @@ from google.auth.transport import requests
 import json
 import uuid
 import shutil
+from payos import PayOS, PaymentData, ItemData
 
 # Load biến môi trường
 load_dotenv()
@@ -26,6 +27,13 @@ load_dotenv()
 # Cấu hình logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Khởi tạo PayOS
+payos = PayOS(
+    client_id=os.getenv("PAYOS_CLIENT_ID", "b215fa99-4cb1-4c79-b2b1-4037c74a5434"),
+    api_key=os.getenv("PAYOS_API_KEY", "d9e06e4a-922d-4bae-999e-ffd92e21724e"),
+    checksum_key=os.getenv("PAYOS_CHECKSUM_KEY", "f14ba2be1289c83379ff961a044d651c122ad695c453167ea649ecb8c42f1ef2")
+)
 
 # Lấy đường dẫn gốc của dự án
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,19 +48,22 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Kết nối SQLite
 DATABASE = os.path.join(BASE_DIR, "mvp50cc.db")
 IMAGE_UPLOAD_DIR = os.path.join(BASE_DIR, "frontend", "static", "images")
+MAINTENANCE_BOOKINGS_FILE = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
 
 if not os.path.exists(IMAGE_UPLOAD_DIR):
     os.makedirs(IMAGE_UPLOAD_DIR)
+if not os.path.exists(os.path.dirname(MAINTENANCE_BOOKINGS_FILE)):
+    os.makedirs(os.path.dirname(MAINTENANCE_BOOKINGS_FILE))
 
 # Thông tin ngân hàng cố định
 BANK_INFO = {
-    "bank_name": "Vietcombank",  # Thay bằng tên ngân hàng của bạn
-    "account_number": "1234567890",  # Thay bằng số tài khoản của bạn
-    "account_holder": "Nguyen Van A"  # Thay bằng tên người thụ hưởng
+    "bank_name": "Vietcombank",
+    "account_number": "1234567890",
+    "account_holder": "Nguyen Van A"
 }
 
 # Email admin để nhận thông báo
-ADMIN_EMAIL = "admin@example.com"  # Thay bằng email admin thực tế
+ADMIN_EMAIL = "admin@example.com"
 
 def get_db():
     try:
@@ -629,6 +640,100 @@ async def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Đăng xuất thành công"}
 
+# PayOS endpoints
+@app.post("/api/create_payment_link")
+async def create_payment_link(data: dict, request: Request, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để tạo liên kết thanh toán")
+    
+    booking_id = data.get("booking_id")
+    user_id = data.get("user_id")
+    
+    try:
+        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user_id):
+                booking = bookings[booking_id]
+                if booking["payment_status"] == "paid":
+                    raise HTTPException(status_code=400, detail="Lịch đặt xe đã được thanh toán")
+                
+                # Tạo mô tả ngắn gọn, không vượt quá 25 ký tự
+                description = f"Payment #{booking_id}"  # Ví dụ: "Payment #0" (độ dài 9 ký tự)
+                if len(description) > 25:
+                    raise HTTPException(status_code=400, detail="Mô tả thanh toán quá dài")
+
+                # Tạo dữ liệu thanh toán cho PayOS
+                order_code = int(f"{booking_id}{int(datetime.utcnow().timestamp())}")
+                amount = booking.get("amount", 20000)
+                items = [ItemData(name=booking["bike_model"], quantity=1, price=amount)]
+                
+                payment_data = PaymentData(
+                    orderCode=order_code,
+                    amount=amount,
+                    description=description,
+                    items=items,
+                    returnUrl=f"{request.base_url}dashboard",
+                    cancelUrl=f"{request.base_url}payment/{booking_id}"
+                )
+                
+                # Gọi API PayOS mà không dùng await
+                result = payos.createPaymentLink(payment_data)  # Gọi trực tiếp
+                if result and hasattr(result, 'checkoutUrl'):
+                    checkout_url = result.checkoutUrl
+                    logger.info(f"Created payment link for booking_id {booking_id}: {checkout_url}")
+                    return {"checkout_url": checkout_url}
+                else:
+                    raise HTTPException(status_code=500, detail="Không thể lấy URL thanh toán từ PayOS")
+            else:
+                raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
+        else:
+            raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu lịch đặt xe")
+    except HTTPException as http_err:
+        raise http_err
+    except Exception as e:
+        logger.error(f"Lỗi khi tạo liên kết thanh toán: {e}")
+        raise HTTPException(status_code=500, detail="Không thể tạo liên kết thanh toán do lỗi server")
+
+@app.post("/api/webhook/payos")
+async def payos_webhook(data: dict):
+    try:
+        # Xác minh webhook từ PayOS
+        webhook_data = payos.verifyPaymentWebhookData(data)
+        if webhook_data["code"] != "00":
+            logger.warning(f"Webhook thanh toán không thành công: {webhook_data}")
+            return JSONResponse(status_code=400, content={"message": "Thanh toán không thành công"})
+
+        order_code = webhook_data["orderCode"]
+        booking_id = int(str(order_code)[:-10])  # Lấy booking_id từ order_code
+        user_id = webhook_data["desc"].split(" - ")[0].split()[-1]  # Lấy user_id từ description
+
+        # Cập nhật trạng thái thanh toán
+        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+            if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user_id):
+                bookings[booking_id]["payment_status"] = "paid"
+                with open(file_path, "w", encoding="utf-8") as f:
+                    for booking in bookings:
+                        json.dump(booking, f, ensure_ascii=False)
+                        f.write("\n")
+                logger.info(f"Webhook: Payment confirmed for booking_id {booking_id}")
+                return {"message": "Xác nhận thanh toán thành công"}
+            else:
+                logger.error(f"Webhook: Booking {booking_id} not found or does not belong to user {user_id}")
+                return JSONResponse(status_code=404, content={"message": "Lịch đặt xe không tồn tại hoặc không thuộc về người dùng"})
+        else:
+            logger.error(f"Webhook: Maintenance bookings file not found at {file_path}")
+            return JSONResponse(status_code=404, content={"message": "Không tìm thấy dữ liệu lịch đặt xe"})
+    except Exception as e:
+        logger.error(f"Lỗi xử lý webhook PayOS: {e}")
+        return JSONResponse(status_code=500, content={"message": "Lỗi xử lý webhook"})
+
 # API routes khác
 @app.post("/api/add_bike")
 async def add_bike(bike: AddBike):
@@ -750,22 +855,43 @@ async def delete_bike(bike: DeleteBike):
 
 @app.post("/api/book_maintenance")
 async def book_maintenance(booking: MaintenanceBooking):
-    file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+    file_path = MAINTENANCE_BOOKINGS_FILE
     logger.debug(f"Booking data received: {booking.dict()}")
     if not booking.location or not booking.date or not booking.bike_model:
         raise HTTPException(status_code=400, detail="Vui lòng cung cấp đầy đủ thông tin (ngày, xe, địa điểm)")
-    with open(file_path, "a", encoding="utf-8") as f:
-        json.dump({
-            "user_id": booking.user_id,
-            "date": booking.date,
-            "bike_model": booking.bike_model,
-            "location": booking.location,
-            "payment_status": "unpaid",
-            "amount": booking.amount
-        }, f, ensure_ascii=False)
-        f.write("\n")
-    logger.info(f"Successfully booked maintenance for user {booking.user_id} with location: {booking.location}")
-    return {"message": "Lịch bảo dưỡng đã được đặt thành công"}
+    
+    # Tạo bản ghi với định dạng chuẩn
+    new_booking = {
+        "user_id": booking.user_id,
+        "date": booking.date,
+        "bike_model": booking.bike_model,
+        "location": booking.location,
+        "payment_status": "unpaid",
+        "amount": booking.amount if booking.amount is not None else 20000
+    }
+    
+    try:
+        # Đọc dữ liệu hiện tại và thêm bản ghi mới
+        bookings = []
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                bookings = [json.loads(line) for line in content if line.strip()]
+        
+        bookings.append(new_booking)
+        with open(file_path, "w", encoding="utf-8") as f:
+            for booking_data in bookings:
+                json.dump(booking_data, f, ensure_ascii=False)
+                f.write("\n")
+        
+        logger.info(f"Successfully booked maintenance for user {booking.user_id} with location: {booking.location}")
+        return {"message": "Lịch bảo dưỡng đã được đặt thành công", "booking_id": len(bookings) - 1}
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
+    except Exception as e:
+        logger.error(f"Error booking maintenance: {e}")
+        raise HTTPException(status_code=500, detail="Không thể đặt lịch bảo dưỡng")
 
 @app.post("/api/update_profile")
 async def update_profile(user_update: UpdateUser, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
@@ -855,7 +981,7 @@ async def get_user_bikes(user_id: int):
 async def get_maintenance_history(user_id: int):
     try:
         history = []
-        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        file_path = MAINTENANCE_BOOKINGS_FILE
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read().strip().splitlines()
@@ -876,7 +1002,7 @@ async def get_maintenance_history(user_id: int):
 
 @app.delete("/api/delete_maintenance")
 async def delete_maintenance(user_id: int, booking_id: int):
-    file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+    file_path = MAINTENANCE_BOOKINGS_FILE
     logger.debug(f"Attempting to delete booking {booking_id} for user {user_id}")
     try:
         if os.path.exists(file_path):
@@ -902,7 +1028,7 @@ async def delete_maintenance(user_id: int, booking_id: int):
 
 @app.post("/api/edit_maintenance")
 async def edit_maintenance(edit: EditMaintenance):
-    file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+    file_path = MAINTENANCE_BOOKINGS_FILE
     logger.debug(f"Attempting to edit booking {edit.booking_id} for user {edit.user_id} with data: {edit.dict()}")
     try:
         if os.path.exists(file_path):
@@ -935,7 +1061,7 @@ async def confirm_payment(data: dict):
     logger.debug(f"Admin confirming payment for booking_id {booking_id}, user_id {user_id}")
     
     try:
-        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        file_path = MAINTENANCE_BOOKINGS_FILE
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read().strip().splitlines()
@@ -968,7 +1094,7 @@ async def confirm_payment(data: dict):
 async def check_payment_status(booking_id: int, user_id: int):
     logger.debug(f"Checking payment status for booking_id {booking_id}, user_id {user_id}")
     try:
-        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        file_path = MAINTENANCE_BOOKINGS_FILE
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read().strip().splitlines()
@@ -997,7 +1123,7 @@ async def notify_payment(data: dict, current_user: Optional[sqlite3.Row] = Depen
     logger.debug(f"User {user_id} notifying payment for booking_id {booking_id}")
     
     try:
-        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        file_path = MAINTENANCE_BOOKINGS_FILE
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read().strip().splitlines()
@@ -1009,7 +1135,7 @@ async def notify_payment(data: dict, current_user: Optional[sqlite3.Row] = Depen
                     raise HTTPException(status_code=400, detail="Lịch đặt xe đã được thanh toán")
                 send_payment_notification_email(booking_id, user_id, current_user["email"], booking)
                 logger.info(f"Payment notification sent for booking_id {booking_id}")
-                return {"message": "Thông báo thanh toán đã được gửi đến admin"}
+                return {"message": "Thông báo thanh toán đã được gửi đến admin. Vui lòng thanh toán qua PayOS."}
             else:
                 logger.error(f"Booking {booking_id} not found or does not belong to user {user_id}")
                 raise HTTPException(status_code=404, detail="Lịch đặt xe không tồn tại hoặc không thuộc về người dùng")
@@ -1030,7 +1156,7 @@ async def payment_page(request: Request, booking_id: int, user: Optional[sqlite3
         return RedirectResponse(url="/login")
     
     try:
-        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        file_path = MAINTENANCE_BOOKINGS_FILE
         logger.debug(f"Attempting to load maintenance bookings from {file_path} for booking_id {booking_id}")
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
@@ -1045,7 +1171,8 @@ async def payment_page(request: Request, booking_id: int, user: Optional[sqlite3
                     "user": user,
                     "booking": booking,
                     "booking_id": booking_id,
-                    "amount": booking.get("amount", 20000)
+                    "amount": booking.get("amount", 20000),
+                    "bank_info": BANK_INFO
                 })
             else:
                 logger.error(f"Booking {booking_id} not found or does not belong to user {user['id']}")
