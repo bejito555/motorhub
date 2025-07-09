@@ -8,7 +8,7 @@ requests
 google-auth
 python-multipart
 payos
-fastapi-session[redis]==0.2.7
-redis==4.6.0  # Thêm Redis client
-setuptools==65.5.1  # Hỗ trợ build
-wheel==0.40.0  # Hỗ trợ build wheel
+fastapi-session==0.2.7  # Loại bỏ [redis]
+redis==4.6.0  # Thêm Redis nếu cần
+setuptools==65.5.1
+wheel==0.40.0
