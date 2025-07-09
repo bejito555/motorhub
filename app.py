@@ -650,24 +650,23 @@ async def create_payment_link(data: dict, request: Request, current_user: Option
     user_id = data.get("user_id")
     
     try:
-        file_path = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
+        file_path = MAINTENANCE_BOOKINGS_FILE
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read().strip().splitlines()
                 bookings = [json.loads(line) for line in content if line.strip()]
             if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user_id):
                 booking = bookings[booking_id]
-                if booking["payment_status"] == "paid":
+                payment_status = booking.get("payment_status", "unpaid")
+                if payment_status == "paid":
                     raise HTTPException(status_code=400, detail="Lịch đặt xe đã được thanh toán")
                 
-                # Tạo mô tả ngắn gọn, không vượt quá 25 ký tự
-                description = f"Payment #{booking_id}"  # Ví dụ: "Payment #0" (độ dài 9 ký tự)
+                description = f"Payment #{booking_id}"
                 if len(description) > 25:
                     raise HTTPException(status_code=400, detail="Mô tả thanh toán quá dài")
 
-                # Tạo dữ liệu thanh toán cho PayOS
                 order_code = int(f"{booking_id}{int(datetime.utcnow().timestamp())}")
-                amount = booking.get("amount", 2000)
+                amount = booking.get("amount", 20000)
                 items = [ItemData(name=booking["bike_model"], quantity=1, price=amount)]
                 
                 payment_data = PaymentData(
@@ -675,12 +674,11 @@ async def create_payment_link(data: dict, request: Request, current_user: Option
                     amount=amount,
                     description=description,
                     items=items,
-                    returnUrl=f"{request.base_url}dashboard",
+                    returnUrl=f"{request.base_url}dashboard?orderCode={order_code}",  # Truyền orderCode trong redirect
                     cancelUrl=f"{request.base_url}payment/{booking_id}"
                 )
                 
-                # Gọi API PayOS mà không dùng await
-                result = payos.createPaymentLink(payment_data)  # Gọi trực tiếp
+                result = payos.createPaymentLink(payment_data)
                 if result and hasattr(result, 'checkoutUrl'):
                     checkout_url = result.checkoutUrl
                     logger.info(f"Created payment link for booking_id {booking_id}: {checkout_url}")
@@ -1215,9 +1213,30 @@ async def verify_email_page(request: Request, email: Optional[str] = None):
     return templates.TemplateResponse("verify_email.html", {"request": request, "email": email})
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
+async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user), status: str = None, orderCode: str = None):
     if not user:
         return RedirectResponse(url="/login")
+    
+    # Kiểm tra tham số status từ PayOS redirect
+    if status == "PAID" and orderCode:
+        try:
+            # Lấy booking_id từ orderCode (giả sử orderCode chứa timestamp, lấy phần đầu)
+            booking_id = int(str(orderCode)[:-10])  # Suy ra index từ orderCode
+            file_path = MAINTENANCE_BOOKINGS_FILE
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip().splitlines()
+                    bookings = [json.loads(line) for line in content if line.strip()]
+                if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user["id"]):
+                    bookings[booking_id]["payment_status"] = "paid"
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        for booking in bookings:
+                            json.dump(booking, f, ensure_ascii=False)
+                            f.write("\n")
+                    logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
+        except Exception as e:
+            logger.error(f"Error updating payment status in dashboard: {e}")
+
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 @app.get("/profile", response_class=HTMLResponse)
