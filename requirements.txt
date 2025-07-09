@@ -8,3 +8,4 @@ requests
 google-auth
 python-multipart
 payos
+fastapi-session[redis]==0.5.0
