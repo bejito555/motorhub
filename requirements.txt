@@ -8,7 +8,6 @@ requests
 google-auth
 python-multipart
 payos
-fastapi-session==0.2.7  # Loại bỏ [redis]
-redis==4.6.0  # Thêm Redis nếu cần
+# fastapi-session==0.2.7  # Comment tạm thời để test
 setuptools==65.5.1
 wheel==0.40.0
