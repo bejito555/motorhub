@@ -44,13 +44,11 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "frontend"))
 
 # Thêm middleware CORS
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Cho phép tất cả nguồn (thay bằng danh sách cụ thể trong production)
-    allow_credentials=True,
-    allow_methods=["*"],  # Cho phép tất cả phương thức
-    allow_headers=["*"],
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET_KEY", "your_session_secret_key"),
+    session_cookie="MOTOSESSION",
+    max_age=3600  # Thời gian sống của session (giây)
 )
-app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY", "your_session_secret_key"), session_cookie="MOTOSESSION")
 # Hash mật khẩu
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
