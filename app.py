@@ -20,7 +20,6 @@ import json
 import uuid
 import shutil
 from payos import PayOS, PaymentData, ItemData
-from fastapi.middleware.cors import CORSMiddleware
 
 # Load biến môi trường
 load_dotenv()
@@ -38,11 +37,10 @@ payos = PayOS(
 
 # Lấy đường dẫn gốc của dự án
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "frontend", "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "frontend"))
-
-# Thêm middleware CORS
 
 # Hash mật khẩu
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -676,14 +674,14 @@ async def create_payment_link(data: dict, request: Request, current_user: Option
                     amount=amount,
                     description=description,
                     items=items,
-                    returnUrl=f"{request.base_url}dashboard?orderCode={order_code}&status={{status}}",
+                    returnUrl=f"{request.base_url}dashboard?orderCode={order_code}",  # Truyền orderCode trong redirect
                     cancelUrl=f"{request.base_url}payment/{booking_id}"
                 )
                 
                 result = payos.createPaymentLink(payment_data)
                 if result and hasattr(result, 'checkoutUrl'):
                     checkout_url = result.checkoutUrl
-                    logger.info(f"Created payment link for booking_id {booking_id} with orderCode {order_code}: {checkout_url}")
+                    logger.info(f"Created payment link for booking_id {booking_id}: {checkout_url}")
                     return {"checkout_url": checkout_url}
                 else:
                     raise HTTPException(status_code=500, detail="Không thể lấy URL thanh toán từ PayOS")
@@ -1195,13 +1193,8 @@ async def read_root(request: Request, user: Optional[sqlite3.Row] = Depends(get_
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    session = request.session
     user = await get_current_user(request)
     if user:
-        # Chuyển hướng về dashboard với trạng thái từ session
-        pending_payment = session.get("pending_payment")
-        if pending_payment and pending_payment.get("status") == "PAID":
-            return RedirectResponse(url=f"/dashboard?orderCode={pending_payment['orderCode']}&status={pending_payment['status']}")
         return RedirectResponse(url="/dashboard")
     return templates.TemplateResponse("login.html", {"request": request})
 
@@ -1218,14 +1211,17 @@ async def verify_email_page(request: Request, email: Optional[str] = None):
     if user:
         return RedirectResponse(url="/dashboard")
     return templates.TemplateResponse("verify_email.html", {"request": request, "email": email})
-    
+
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
-    status = request.query_params.get("status")
-    orderCode = request.query_params.get("orderCode")
-    if user and status == "PAID" and orderCode and orderCode.strip():
+async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user), status: str = None, orderCode: str = None):
+    if not user:
+        return RedirectResponse(url="/login")
+    
+    # Kiểm tra tham số status từ PayOS redirect
+    if status == "PAID" and orderCode:
         try:
-            booking_id = int(str(orderCode).split("_")[0]) if "_" in orderCode else int(orderCode)
+            # Lấy booking_id từ orderCode (giả sử orderCode chứa timestamp, lấy phần đầu)
+            booking_id = int(str(orderCode)[:-10])  # Suy ra index từ orderCode
             file_path = MAINTENANCE_BOOKINGS_FILE
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -1240,6 +1236,7 @@ async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends
                     logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
         except Exception as e:
             logger.error(f"Error updating payment status in dashboard: {e}")
+
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 @app.get("/profile", response_class=HTMLResponse)
