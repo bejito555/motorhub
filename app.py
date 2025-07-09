@@ -21,7 +21,7 @@ import uuid
 import shutil
 from payos import PayOS, PaymentData, ItemData
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi_session import SessionMiddleware
+
 # Load biến môi trường
 load_dotenv()
 
