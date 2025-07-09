@@ -168,7 +168,7 @@ class MaintenanceBooking(BaseModel):
     date: str
     bike_model: str
     location: str
-    amount: Optional[int] = 20000
+    amount: Optional[int] = 2000
 
 class EditMaintenance(BaseModel):
     user_id: int
@@ -482,7 +482,7 @@ def send_payment_notification_email(booking_id: int, user_id: int, user_email: s
             f"Ngày: {booking['date']}\n"
             f"Xe: {booking['bike_model']}\n"
             f"Địa điểm: {booking['location']}\n"
-            f"Số tiền: {booking.get('amount', 20000)} VND\n\n"
+            f"Số tiền: {booking.get('amount', 2000)} VND\n\n"
             f"Vui lòng kiểm tra giao dịch ngân hàng và xác nhận thanh toán qua API /api/confirm_payment."
         )
         msg['Subject'] = f'Thông báo thanh toán từ MotoHub - Booking ID {booking_id}'
@@ -667,7 +667,7 @@ async def create_payment_link(data: dict, request: Request, current_user: Option
 
                 # Tạo dữ liệu thanh toán cho PayOS
                 order_code = int(f"{booking_id}{int(datetime.utcnow().timestamp())}")
-                amount = booking.get("amount", 20000)
+                amount = booking.get("amount", 2000)
                 items = [ItemData(name=booking["bike_model"], quantity=1, price=amount)]
                 
                 payment_data = PaymentData(
@@ -867,7 +867,8 @@ async def book_maintenance(booking: MaintenanceBooking):
         "bike_model": booking.bike_model,
         "location": booking.location,
         "payment_status": "unpaid",
-        "amount": booking.amount if booking.amount is not None else 20000
+        "amount": booking.amount if booking.amount is not None else 2000
+
     }
     
     try:
@@ -1171,7 +1172,7 @@ async def payment_page(request: Request, booking_id: int, user: Optional[sqlite3
                     "user": user,
                     "booking": booking,
                     "booking_id": booking_id,
-                    "amount": booking.get("amount", 20000),
+                    "amount": booking.get("amount", 2000),
                     "bank_info": BANK_INFO
                 })
             else:
