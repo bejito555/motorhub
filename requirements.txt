@@ -7,3 +7,4 @@ python-jose
 requests
 google-auth
 python-multipart
+payos
