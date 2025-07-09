@@ -20,7 +20,7 @@ import json
 import uuid
 import shutil
 from payos import PayOS, PaymentData, ItemData
-
+from fastapi.middleware.cors import CORSMiddleware
 # Load biến môi trường
 load_dotenv()
 
@@ -37,11 +37,18 @@ payos = PayOS(
 
 # Lấy đường dẫn gốc của dự án
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "frontend", "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "frontend"))
 
+# Thêm middleware CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Cho phép tất cả nguồn (thay bằng danh sách cụ thể trong production)
+    allow_credentials=True,
+    allow_methods=["*"],  # Cho phép tất cả phương thức
+    allow_headers=["*"],
+)
 # Hash mật khẩu
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -674,7 +681,7 @@ async def create_payment_link(data: dict, request: Request, current_user: Option
                     amount=amount,
                     description=description,
                     items=items,
-                    returnUrl=f"{request.base_url}dashboard?orderCode={order_code}&status={{status}}",  # Thêm placeholder cho status
+                    returnUrl=f"{request.base_url}dashboard?orderCode={order_code}&status={{status}}",
                     cancelUrl=f"{request.base_url}payment/{booking_id}"
                 )
                 
@@ -1221,20 +1228,21 @@ async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends
     if status == "PAID" and orderCode and orderCode.strip():
         try:
             # Lấy booking_id từ orderCode, xử lý an toàn
-            booking_id = int(str(orderCode)[:-10]) if orderCode.strip().isdigit() else None
-            if booking_id is not None and 0 <= booking_id < len(bookings):
-                file_path = MAINTENANCE_BOOKINGS_FILE
-                if os.path.exists(file_path):
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        content = f.read().strip().splitlines()
-                        bookings = [json.loads(line) for line in content if line.strip()]
-                    if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user["id"]):
-                        bookings[booking_id]["payment_status"] = "paid"
-                        with open(file_path, "w", encoding="utf-8") as f:
-                            for booking in bookings:
-                                json.dump(booking, f, ensure_ascii=False)
-                                f.write("\n")
-                        logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
+            booking_id = int(str(orderCode).split("_")[0]) if "_" in orderCode else int(orderCode)  # Thử lấy phần đầu nếu có timestamp
+            file_path = MAINTENANCE_BOOKINGS_FILE
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip().splitlines()
+                    bookings = [json.loads(line) for line in content if line.strip()]
+                if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user["id"]):
+                    bookings[booking_id]["payment_status"] = "paid"
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        for booking in bookings:
+                            json.dump(booking, f, ensure_ascii=False)
+                            f.write("\n")
+                    logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
+        except ValueError as e:
+            logger.error(f"Error updating payment status in dashboard: Invalid orderCode {orderCode}: {e}")
         except Exception as e:
             logger.error(f"Error updating payment status in dashboard: {e}")
 
