@@ -21,6 +21,7 @@ import uuid
 import shutil
 from payos import PayOS, PaymentData, ItemData
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_session import SessionMiddleware
 # Load biến môi trường
 load_dotenv()
 
@@ -49,6 +50,7 @@ app.add_middleware(
     allow_methods=["*"],  # Cho phép tất cả phương thức
     allow_headers=["*"],
 )
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY", "your_session_secret_key"), session_cookie="MOTOSESSION")
 # Hash mật khẩu
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -1200,8 +1202,13 @@ async def read_root(request: Request, user: Optional[sqlite3.Row] = Depends(get_
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    session = request.session
     user = await get_current_user(request)
     if user:
+        # Chuyển hướng về dashboard với trạng thái từ session
+        pending_payment = session.get("pending_payment")
+        if pending_payment and pending_payment.get("status") == "PAID":
+            return RedirectResponse(url=f"/dashboard?orderCode={pending_payment['orderCode']}&status={pending_payment['status']}")
         return RedirectResponse(url="/dashboard")
     return templates.TemplateResponse("login.html", {"request": request})
 
@@ -1221,14 +1228,20 @@ async def verify_email_page(request: Request, email: Optional[str] = None):
     
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user), status: str = None, orderCode: str = None):
+    session = request.session
     if not user:
+        # Lưu trạng thái từ redirect nếu có
+        if status == "PAID" and orderCode and orderCode.strip():
+            session["pending_payment"] = {"status": status, "orderCode": orderCode}
         return RedirectResponse(url="/login")
     
-    # Kiểm tra tham số status từ PayOS redirect
+    # Kiểm tra và xử lý trạng thái từ session hoặc query
     if status == "PAID" and orderCode and orderCode.strip():
+        session["pending_payment"] = {"status": status, "orderCode": orderCode}
+    pending_payment = session.get("pending_payment")
+    if pending_payment and pending_payment.get("status") == "PAID" and pending_payment.get("orderCode"):
         try:
-            # Lấy booking_id từ orderCode, xử lý an toàn
-            booking_id = int(str(orderCode).split("_")[0]) if "_" in orderCode else int(orderCode)  # Thử lấy phần đầu nếu có timestamp
+            booking_id = int(str(pending_payment["orderCode"]).split("_")[0]) if "_" in pending_payment["orderCode"] else int(pending_payment["orderCode"])
             file_path = MAINTENANCE_BOOKINGS_FILE
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -1241,8 +1254,9 @@ async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends
                             json.dump(booking, f, ensure_ascii=False)
                             f.write("\n")
                     logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
+                    session.pop("pending_payment", None)  # Xóa session sau khi xử lý
         except ValueError as e:
-            logger.error(f"Error updating payment status in dashboard: Invalid orderCode {orderCode}: {e}")
+            logger.error(f"Error updating payment status in dashboard: Invalid orderCode {pending_payment['orderCode']}: {e}")
         except Exception as e:
             logger.error(f"Error updating payment status in dashboard: {e}")
 
