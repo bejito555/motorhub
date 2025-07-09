@@ -1225,21 +1225,12 @@ async def verify_email_page(request: Request, email: Optional[str] = None):
     return templates.TemplateResponse("verify_email.html", {"request": request, "email": email})
     
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user), status: str = None, orderCode: str = None):
-    session = request.session
-    if not user:
-        # Lưu trạng thái từ redirect nếu có
-        if status == "PAID" and orderCode and orderCode.strip():
-            session["pending_payment"] = {"status": status, "orderCode": orderCode}
-        return RedirectResponse(url="/login")
-    
-    # Kiểm tra và xử lý trạng thái từ session hoặc query
-    if status == "PAID" and orderCode and orderCode.strip():
-        session["pending_payment"] = {"status": status, "orderCode": orderCode}
-    pending_payment = session.get("pending_payment")
-    if pending_payment and pending_payment.get("status") == "PAID" and pending_payment.get("orderCode"):
+async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    status = request.query_params.get("status")
+    orderCode = request.query_params.get("orderCode")
+    if user and status == "PAID" and orderCode and orderCode.strip():
         try:
-            booking_id = int(str(pending_payment["orderCode"]).split("_")[0]) if "_" in pending_payment["orderCode"] else int(pending_payment["orderCode"])
+            booking_id = int(str(orderCode).split("_")[0]) if "_" in orderCode else int(orderCode)
             file_path = MAINTENANCE_BOOKINGS_FILE
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -1252,12 +1243,8 @@ async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends
                             json.dump(booking, f, ensure_ascii=False)
                             f.write("\n")
                     logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
-                    session.pop("pending_payment", None)  # Xóa session sau khi xử lý
-        except ValueError as e:
-            logger.error(f"Error updating payment status in dashboard: Invalid orderCode {pending_payment['orderCode']}: {e}")
         except Exception as e:
             logger.error(f"Error updating payment status in dashboard: {e}")
-
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 @app.get("/profile", response_class=HTMLResponse)
