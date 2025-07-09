@@ -1218,10 +1218,10 @@ async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends
         return RedirectResponse(url="/login")
     
     # Kiểm tra tham số status từ PayOS redirect
-    if status == "PAID" and orderCode:
+    if status == "PAID" and orderCode and orderCode.strip():
         try:
-            # Lấy booking_id từ orderCode (giả sử orderCode chứa timestamp, lấy phần đầu)
-            booking_id = int(str(orderCode)[:-10])  # Suy ra index từ orderCode
+            # Lấy booking_id (index) từ orderCode
+            booking_id = int(str(orderCode)[:-10])  # Suy ra index từ phần đầu của orderCode
             file_path = MAINTENANCE_BOOKINGS_FILE
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -1234,6 +1234,8 @@ async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends
                             json.dump(booking, f, ensure_ascii=False)
                             f.write("\n")
                     logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
+        except ValueError as e:
+            logger.error(f"Error updating payment status in dashboard: Invalid orderCode {orderCode}: {e}")
         except Exception as e:
             logger.error(f"Error updating payment status in dashboard: {e}")
 
