@@ -674,14 +674,14 @@ async def create_payment_link(data: dict, request: Request, current_user: Option
                     amount=amount,
                     description=description,
                     items=items,
-                    returnUrl=f"{request.base_url}dashboard?orderCode={order_code}",  # Truyền orderCode trong redirect
+                    returnUrl=f"{request.base_url}dashboard?orderCode={order_code}&status={{status}}",  # Thêm placeholder cho status
                     cancelUrl=f"{request.base_url}payment/{booking_id}"
                 )
                 
                 result = payos.createPaymentLink(payment_data)
                 if result and hasattr(result, 'checkoutUrl'):
                     checkout_url = result.checkoutUrl
-                    logger.info(f"Created payment link for booking_id {booking_id}: {checkout_url}")
+                    logger.info(f"Created payment link for booking_id {booking_id} with orderCode {order_code}: {checkout_url}")
                     return {"checkout_url": checkout_url}
                 else:
                     raise HTTPException(status_code=500, detail="Không thể lấy URL thanh toán từ PayOS")
@@ -1211,29 +1211,30 @@ async def verify_email_page(request: Request, email: Optional[str] = None):
     if user:
         return RedirectResponse(url="/dashboard")
     return templates.TemplateResponse("verify_email.html", {"request": request, "email": email})
-
+    
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user), status: str = None, orderCode: str = None):
     if not user:
         return RedirectResponse(url="/login")
     
     # Kiểm tra tham số status từ PayOS redirect
-    if status == "PAID" and orderCode:
+    if status == "PAID" and orderCode and orderCode.strip():
         try:
-            # Lấy booking_id từ orderCode (giả sử orderCode chứa timestamp, lấy phần đầu)
-            booking_id = int(str(orderCode)[:-10])  # Suy ra index từ orderCode
-            file_path = MAINTENANCE_BOOKINGS_FILE
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read().strip().splitlines()
-                    bookings = [json.loads(line) for line in content if line.strip()]
-                if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user["id"]):
-                    bookings[booking_id]["payment_status"] = "paid"
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        for booking in bookings:
-                            json.dump(booking, f, ensure_ascii=False)
-                            f.write("\n")
-                    logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
+            # Lấy booking_id từ orderCode, xử lý an toàn
+            booking_id = int(str(orderCode)[:-10]) if orderCode.strip().isdigit() else None
+            if booking_id is not None and 0 <= booking_id < len(bookings):
+                file_path = MAINTENANCE_BOOKINGS_FILE
+                if os.path.exists(file_path):
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read().strip().splitlines()
+                        bookings = [json.loads(line) for line in content if line.strip()]
+                    if 0 <= booking_id < len(bookings) and str(bookings[booking_id].get("user_id")) == str(user["id"]):
+                        bookings[booking_id]["payment_status"] = "paid"
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            for booking in bookings:
+                                json.dump(booking, f, ensure_ascii=False)
+                                f.write("\n")
+                        logger.info(f"Payment status updated to 'paid' for booking_id {booking_id} via dashboard")
         except Exception as e:
             logger.error(f"Error updating payment status in dashboard: {e}")
 
