@@ -457,13 +457,35 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
         return RedirectResponse(url="/login")
     
     user_id = user["id"]
+
+    # Xử lý thanh toán thành công từ PayOS
+    if status == "PAID" and orderCode:
+        updated = False
+        if os.path.exists(CART_FILE):
+            with open(CART_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                cart_items = [json.loads(line) for line in content if line.strip()]
+
+            for item in cart_items:
+                if str(item.get("orderCode")) == str(orderCode) and str(item.get("user_id")) == str(user_id):
+                    if item["payment_status"] != "paid":
+                        item["payment_status"] = "paid"
+                        updated = True
+
+            if updated:
+                with open(CART_FILE, "w", encoding="utf-8") as f:
+                    for item in cart_items:
+                        f.write(json.dumps(item, ensure_ascii=False) + "\n")
+                logger.info(f"Đã cập nhật trạng thái PAID cho đơn hàng {orderCode}")
+
+    # Tiếp tục tính giỏ hàng unpaid như cũ
     cart_items = []
     total_amount = 0
     if os.path.exists(CART_FILE):
         with open(CART_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip().splitlines()
             cart_items = [json.loads(line) for line in content if line.strip()]
-        user_cart = [item for item in cart_items if str(item.get("user_id")) == str(user_id) and item.get("payment_status") == "unpaid"]  # Chỉ unpaid
+        user_cart = [item for item in cart_items if str(item.get("user_id")) == str(user_id) and item.get("payment_status") == "unpaid"]
         if os.path.exists(SPARE_PARTS_FILE):
             with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
                 spare_parts = json.load(f)
@@ -472,16 +494,15 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
                 if spare_part:
                     item["name"] = spare_part["name"]
                     item["price"] = spare_part["price"]
-                    total_amount += spare_part["price"] * item["quantity"]  # Chỉ tính unpaid
-
-    # ... (giữ nguyên phần cập nhật status và GHN)
+                    total_amount += spare_part["price"] * item["quantity"]
 
     return templates.TemplateResponse("cart.html", {
         "request": request,
         "user": user,
-        "cart_items": user_cart,  # Chỉ hiển thị unpaid
+        "cart_items": user_cart,
         "total_amount": total_amount
     })
+
 
 @app.get("/api/community/posts")
 async def get_posts(user_id: Optional[int] = None):
