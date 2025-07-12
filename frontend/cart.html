@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giỏ Hàng - MotoHub</title>
+    <link rel="stylesheet" href="/static/css/style.css" onerror="this.style.display='none';">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <a href="/">MotoHub</a>
+            </div>
+            <ul class="nav-links">
+                <li><a href="/">Trang chủ</a></li>
+                <li><a href="/search">Tìm kiếm</a></li>
+                {% if not user %}
+                    <li><a href="/login">Đăng nhập</a></li>
+                {% else %}
+                    <li><a href="/dashboard">Trang chính</a></li>
+                    <li><a href="/logout">Đăng xuất</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        {% if user %}
+            <section class="cart-section">
+                <h2>Giỏ Hàng Của Bạn</h2>
+                {% if cart_items %}
+                    <div class="cart-items">
+                        {% for item in cart_items %}
+                            <div class="cart-item">
+                                <h3>{{ item.name }}</h3>
+                                <p>Số lượng: {{ item.quantity }}</p>
+                                <p>Giá: {{ item.price * item.quantity }} VND</p>
+                                <p>Trạng thái: {{ item.payment_status }}</p>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="cart-total">
+                        <p><strong>Tổng cộng:</strong> {{ total_amount }} VND</p>
+                        <button id="payos-button" onclick="createPaymentLink()">Thanh toán ngay</button>
+                    </div>
+                {% else %}
+                    <p>Giỏ hàng của bạn trống. <a href="/spare_parts">Mua sắm ngay</a></p>
+                {% endif %}
+            </section>
+        {% else %}
+            <section>
+                <h2>Vui lòng đăng nhập để xem giỏ hàng.</h2>
+                <a href="/login">Đăng nhập</a>
+            </section>
+        {% endif %}
+    </main>
+
+<script>
+    async function createPaymentLink() {
+        // Lấy và xử lý cookie một cách an toàn
+        let token = null;
+        const cookies = document.cookie.split('; ').reduce((acc, row) => {
+            const [name, value] = row.split('=');
+            acc[name] = value;
+            return acc;
+        }, {});
+        token = cookies['access_token'];
+        console.log('Token from cookie:', token); // Debug token
+
+        if (!token || token === 'undefined') {
+            alert('Vui lòng đăng nhập lại để tiếp tục. Token không hợp lệ.');
+            console.error('No valid token found in cookie');
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/create_payment_link_spare', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({})
+            });
+            const data = await response.json();
+            console.log('Server response:', data); // Debug response
+            if (data.checkout_url) {
+                window.location.href = data.checkout_url;
+            } else {
+                alert('Không thể tạo liên kết thanh toán: ' + (data.detail || 'Lỗi không xác định'));
+                console.error('Error response:', data.detail);
+            }
+        } catch (error) {
+            console.error('Fetch error:', error);
+            alert('Đã xảy ra lỗi khi tạo liên kết thanh toán: ' + error.message);
+        }
+    }
+</script>
+</body>
+</html>

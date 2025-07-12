@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xem Linh Kiện - MotoHub</title>
+    <link rel="stylesheet" href="/static/css/style.css" onerror="this.style.display='none';">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <a href="/">MotoHub</a>
+            </div>
+            <ul class="nav-links">
+                <li><a href="/">Trang chủ</a></li>
+                <li><a href="/search">Tìm kiếm</a></li>
+                {% if not user %}
+                    <li><a href="/login">Đăng nhập</a></li>
+                {% else %}
+                    <li><a href="/dashboard">Trang chính</a></li>
+                    <li><a href="/logout">Đăng xuất</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        {% if user %}
+            <section class="spare-parts-section">
+                <h2>Danh sách Linh Kiện</h2>
+                {% if spare_parts %}
+                    <div class="spare-parts-list">
+                        {% for part in spare_parts %}
+                            <div class="spare-part-item">
+                                <h3>{{ part.name }}</h3>
+                                <p>Giá: {{ part.price }} VND</p>
+                                <p>Tồn kho: {{ part.stock }}</p>
+                                <button class="add-to-cart-btn" data-id="{{ part.id }}">Thêm vào giỏ</button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p>Không có linh kiện nào để hiển thị.</p>
+                {% endif %}
+            </section>
+        {% else %}
+            <section>
+                <h2>Vui lòng đăng nhập để xem linh kiện.</h2>
+                <a href="/login">Đăng nhập</a>
+            </section>
+        {% endif %}
+    </main>
+
+    <script>
+        $(document).ready(function() {
+            $(".add-to-cart-btn").click(function() {
+                const spare_part_id = $(this).data("id");
+                $.ajax({
+                    url: '/api/add_to_cart',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ spare_part_id: spare_part_id, quantity: 1 }),
+                    success: function(response) {
+                        alert(response.message);
+                        window.location.href = '/cart';
+                    },
+                    error: function(xhr) {
+                        alert('Lỗi khi thêm vào giỏ hàng: ' + xhr.responseJSON.detail);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
