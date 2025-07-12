@@ -338,9 +338,10 @@ async def create_payment_link_spare(request: Request, current_user: Optional[sql
     if not current_user:
         logger.error("User not authenticated")
         raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để tạo liên kết thanh toán")
-    
+
     user_id = current_user["id"]
     logger.debug(f"Processing payment for user_id: {user_id}")
+
     try:
         cart_items = []
         if os.path.exists(CART_FILE):
@@ -348,56 +349,71 @@ async def create_payment_link_spare(request: Request, current_user: Optional[sql
                 content = f.read().strip().splitlines()
                 cart_items = [json.loads(line) for line in content if line.strip()]
         logger.debug(f"Cart items loaded: {cart_items}")
-        
+
         user_cart = [item for item in cart_items if str(item.get("user_id")) == str(user_id) and item.get("payment_status") == "unpaid"]
         logger.debug(f"User cart items: {user_cart}")
         if not user_cart:
             logger.warning("No unpaid items found in cart for user")
             raise HTTPException(status_code=404, detail="Không tìm thấy giỏ hàng của người dùng")
 
-        item = user_cart[0]  # Thanh toán từng linh kiện
-        logger.debug(f"Selected item for payment: {item}")
-        if os.path.exists(SPARE_PARTS_FILE):
-            with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
-                spare_parts = json.load(f)
+        # Load spare parts data
+        with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
+            spare_parts = json.load(f)
+
+        # Tính tổng tiền và danh sách item
+        total_amount = 0
+        items = []
+        description_parts = []
+        order_code = int(f"{user_id}{int(datetime.utcnow().timestamp())}")  # Mã đơn hàng unique theo user + timestamp
+
+        for item in user_cart:
             spare_part = next((part for part in spare_parts if part["id"] == item["spare_part_id"]), None)
             if not spare_part:
-                logger.error(f"Spare part not found for id: {item['spare_part_id']}")
-                raise HTTPException(status_code=404, detail="Linh kiện không tồn tại")
+                logger.warning(f"Không tìm thấy linh kiện id: {item['spare_part_id']}")
+                continue  # Bỏ qua nếu linh kiện không còn tồn tại
 
-            total_amount = spare_part["price"] * item["quantity"]
-            description = f"Payment for {spare_part['name']} by user {user_id}"
-            if len(description) > 25:
-                description = description[:25]
-            logger.debug(f"Payment details: amount={total_amount}, description={description}")
+            item_price = spare_part["price"] * item["quantity"]
+            total_amount += item_price
+            items.append(ItemData(name=spare_part["name"], quantity=item["quantity"], price=spare_part["price"]))
+            description_parts.append(spare_part["name"])
 
-            order_code = int(f"{item['spare_part_id']}{int(datetime.utcnow().timestamp())}")
-            items = [ItemData(name=spare_part["name"], quantity=item["quantity"], price=spare_part["price"])]
+            # Ghi lại orderCode vào item để sau này cập nhật payment_status
+            item["orderCode"] = order_code
 
-            payment_data = PaymentData(
-                orderCode=order_code,
-                amount=total_amount,
-                description=description,
-                items=items,
-                returnUrl=f"{request.base_url}cart?orderCode={order_code}",
-                cancelUrl=f"{request.base_url}cart"
-            )
-            logger.debug(f"Payment data created: {payment_data.__dict__}")
+        if not items:
+            raise HTTPException(status_code=400, detail="Không có linh kiện hợp lệ để thanh toán")
 
-            result = payos.createPaymentLink(payment_data)
-            if result and hasattr(result, 'checkoutUrl'):
-                checkout_url = result.checkoutUrl
-                logger.info(f"Created payment link for spare_part_id {item['spare_part_id']} of user {user_id} with orderCode {order_code}: {checkout_url}")
-                return {"checkout_url": checkout_url}
-            else:
-                logger.error("Failed to get checkout URL from PayOS")
-                raise HTTPException(status_code=500, detail="Không thể lấy URL thanh toán từ PayOS")
-    except HTTPException as http_err:
-        logger.error(f"HTTP Exception: {http_err.detail}")
-        raise http_err
+        # Viết lại file cart.json với orderCode
+        with open(CART_FILE, "w", encoding="utf-8") as f:
+            for item in cart_items:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+        description = f"Thanh toán: {', '.join(description_parts)}"
+        if len(description) > 255:
+            description = description[:250] + "..."
+
+        payment_data = PaymentData(
+            orderCode=order_code,
+            amount=total_amount,
+            description=description,
+            items=items,
+            returnUrl=f"{request.base_url}cart?orderCode={order_code}&status=PAID",
+            cancelUrl=f"{request.base_url}cart"
+        )
+
+        logger.debug(f"Payment data: {payment_data.__dict__}")
+
+        result = payos.createPaymentLink(payment_data)
+        if result and hasattr(result, 'checkoutUrl'):
+            logger.info(f"Tạo liên kết thanh toán thành công cho user {user_id}: {result.checkoutUrl}")
+            return {"checkout_url": result.checkoutUrl}
+        else:
+            logger.error("Không thể tạo liên kết thanh toán từ PayOS")
+            raise HTTPException(status_code=500, detail="Không thể tạo liên kết thanh toán")
     except Exception as e:
-        logger.error(f"Lỗi khi tạo liên kết thanh toán cho giỏ hàng: {str(e)}")
-        raise HTTPException(status_code=500, detail="Không thể tạo liên kết thanh toán do lỗi server")
+        logger.exception("Lỗi khi tạo liên kết thanh toán")
+        raise HTTPException(status_code=500, detail="Lỗi server")
+
     
 
 @app.post("/api/add_to_cart")
