@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Lịch sử đơn hàng - MotoHub</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo"><a href="/">MotoHub</a></div>
+            <ul class="nav-links">
+                <li><a href="/">Trang chủ</a></li>
+                <li><a href="/cart">Giỏ hàng</a></li>
+                <li><a href="/orders">Lịch sử đơn hàng</a></li>
+                {% if not user %}
+                    <li><a href="/login">Đăng nhập</a></li>
+                {% else %}
+                    <li><a href="/dashboard">Trang chính</a></li>
+                    <li><a href="/logout">Đăng xuất</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <h2>Lịch sử đơn hàng đã thanh toán</h2>
+        {% if orders %}
+            <div class="order-list">
+                {% for item in orders %}
+                    <div class="order-item">
+                        <h3>{{ item.name }}</h3>
+                        <p>Số lượng: {{ item.quantity }}</p>
+                        <p>Giá: {{ item.price * item.quantity }} VND</p>
+                        <p>Mã đơn hàng: {{ item.orderCode }}</p>
+                        <p>Trạng thái: {{ item.payment_status }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>Bạn chưa có đơn hàng nào đã thanh toán.</p>
+        {% endif %}
+    </main>
+</body>
+</html>
