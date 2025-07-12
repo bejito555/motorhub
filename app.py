@@ -819,6 +819,38 @@ async def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Đăng xuất thành công"}
 
+@app.post("/api/remove_from_cart")
+async def remove_from_cart(item: CartItem, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để xóa khỏi giỏ hàng")
+    
+    user_id = current_user["id"]
+    try:
+        cart_items = []
+        if os.path.exists(CART_FILE):
+            with open(CART_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                cart_items = [json.loads(line) for line in content if line.strip()]
+
+        # Xóa item phù hợp với user_id và spare_part_id
+        new_cart_items = [item_data for item_data in cart_items if not (str(item_data.get("user_id")) == str(user_id) and item_data.get("spare_part_id") == item.spare_part_id)]
+
+        if len(new_cart_items) < len(cart_items):
+            with open(CART_FILE, "w", encoding="utf-8") as f:
+                for item_data in new_cart_items:
+                    json.dump(item_data, f, ensure_ascii=False)
+                    f.write("\n")
+            logger.info(f"Removed spare_part_id {item.spare_part_id} from cart for user {user_id}")
+            return {"message": "Đã xóa linh kiện khỏi giỏ hàng"}
+        else:
+            raise HTTPException(status_code=404, detail="Không tìm thấy linh kiện trong giỏ hàng")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in cart.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file giỏ hàng")
+    except Exception as e:
+        logger.error(f"Error removing from cart: {e}")
+        raise HTTPException(status_code=500, detail="Không thể xóa khỏi giỏ hàng")
+
 # PayOS endpoints
 @app.post("/api/create_payment_link")
 async def create_payment_link(data: dict, request: Request, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
