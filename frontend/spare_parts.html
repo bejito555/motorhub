@@ -37,7 +37,8 @@
                                 <h3>{{ part.name }}</h3>
                                 <p>Giá: {{ part.price }} VND</p>
                                 <p>Tồn kho: {{ part.stock }}</p>
-                                <button class="add-to-cart-btn" data-id="{{ part.id }}">Thêm vào giỏ</button>
+                                <!-- Gắn trực tiếp onclick vào nút -->
+                                <button onclick="addToCart({{ part.id }})">Thêm vào giỏ</button>
                             </div>
                         {% endfor %}
                     </div>
@@ -53,29 +54,28 @@
         {% endif %}
     </main>
 
-   <script>
-    async function addToCart(spare_part_id) {
-        const token = document.cookie.split('; ').find(row => row.startsWith('access_token='))?.split('=')[1];
-        if (!token) {
-            alert('Vui lòng đăng nhập để thêm vào giỏ hàng.');
-            return;
+    <script>
+        async function addToCart(spare_part_id) {
+            try {
+                const response = await fetch('/api/add_to_cart', {
+                    method: 'POST',
+                    credentials: 'include',  // Gửi cookie JWT
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        spare_part_id: spare_part_id,
+                        quantity: 1
+                    })
+                });
+
+                const data = await response.json();
+                alert(data.message || "Thêm vào giỏ hàng thành công!");
+            } catch (error) {
+                console.error('Lỗi khi thêm vào giỏ hàng:', error);
+                alert('Đã xảy ra lỗi khi thêm vào giỏ hàng.');
+            }
         }
-        try {
-            const response = await fetch('/api/add_to_cart', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({spare_part_id: spare_part_id, quantity: 1})
-            });
-            const data = await response.json();
-            alert(data.message);  // Chỉ alert thành công, không redirect
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Đã xảy ra lỗi khi thêm vào giỏ hàng.');
-        }
-    }
-</script>
+    </script>
 </body>
 </html>
