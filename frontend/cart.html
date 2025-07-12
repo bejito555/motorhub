@@ -84,5 +84,38 @@
         }
     }
 </script>
+    <div class="cart-items">
+    {% for item in cart_items %}
+        <div class="cart-item">
+            <h3>{{ item.name }}</h3>
+            <p>Số lượng: {{ item.quantity }}</p>
+            <p>Giá: {{ item.price * item.quantity }} VND</p>
+            <p>Trạng thái: {{ item.payment_status }}</p>
+            <button onclick="removeFromCart({{ item.spare_part_id }})">Xóa</button>  <!-- Nút xóa mới -->
+        </div>
+    {% endfor %}
+</div>
+
+<script>
+    async function removeFromCart(spare_part_id) {
+        const token = document.cookie.split('; ').find(row => row.startsWith('access_token=')).split('=')[1];
+        try {
+            const response = await fetch('/api/remove_from_cart', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({spare_part_id: spare_part_id, quantity: 1})  // Quantity không cần nhưng giữ để khớp model
+            });
+            const data = await response.json();
+            alert(data.message);
+            location.reload();  // Reload trang để cập nhật giỏ hàng
+        } catch (error) {
+            console.error('Lỗi:', error);
+            alert('Đã xảy ra lỗi khi xóa khỏi giỏ hàng.');
+        }
+    }
+</script>
 </body>
 </html>
