@@ -462,7 +462,8 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
     # Kiểm tra và cập nhật trạng thái thanh toán từ PayOS redirect
     if status == "PAID" and orderCode and orderCode.strip():
         try:
-            spare_part_id = int(orderCode.split("_")[0]) if "_" in orderCode else int(orderCode)
+            # Parse spare_part_id từ orderCode (giả định orderCode = spare_part_id + timestamp, spare_part_id 1 chữ số)
+            spare_part_id = int(str(orderCode)[:-10])  # Lấy phần đầu, loại bỏ 10 chữ số timestamp
             for item in cart_items:
                 if str(item.get("user_id")) == str(user_id) and item.get("spare_part_id") == spare_part_id and item.get("payment_status") == "unpaid":
                     item["payment_status"] = "paid"
@@ -473,36 +474,34 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
                     logger.info(f"Payment status updated to 'paid' for spare_part_id {spare_part_id} via cart")
 
                     # Tích hợp GHN: Tạo đơn giao hàng sau khi thanh toán thành công
-                    # Lấy thông tin user từ database (địa chỉ, điện thoại, ...)
                     with get_db() as conn:
                         cursor = conn.cursor()
                         cursor.execute("SELECT fullName, mobile, location FROM users WHERE id = ?", (user_id,))
                         user_data = cursor.fetchone()
                     if user_data:
                         full_name = user_data["fullName"]
-                        phone = user_data["mobile"] or "0987654321"  # Placeholder nếu không có
-                        address = user_data["location"] or "Địa chỉ mặc định"  # Placeholder nếu không có
+                        phone = user_data["mobile"] or "0987654321"
+                        address = user_data["location"] or "Địa chỉ mặc định"
 
-                        # Tìm linh kiện từ spare_parts.json
+                        # Tìm linh kiện
                         with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
                             spare_parts = json.load(f)
                         spare_part = next((part for part in spare_parts if part["id"] == spare_part_id), None)
 
                         if spare_part:
-                            # Payload cho GHN API (tùy chỉnh theo nhu cầu)
                             ghn_payload = {
-                                "payment_type_id": 2,  # 2: Người nhận trả phí
+                                "payment_type_id": 2,
                                 "required_note": "KHONGCHOXEMHANG",
                                 "to_name": full_name,
                                 "to_phone": phone,
                                 "to_address": address,
-                                "to_ward_code": "20308",  # Mã phường mặc định (thay bằng thực tế)
-                                "to_district_id": 1444,  # ID quận mặc định (thay bằng thực tế)
-                                "weight": 200,  # Trọng lượng mặc định (gram)
-                                "length": 20,  # Chiều dài (cm)
-                                "width": 20,  # Chiều rộng (cm)
-                                "height": 10,  # Chiều cao (cm)
-                                "service_type_id": 2,  # Loại dịch vụ (2: Tiết kiệm)
+                                "to_ward_code": "20308",
+                                "to_district_id": 1444,
+                                "weight": 200,
+                                "length": 20,
+                                "width": 20,
+                                "height": 10,
+                                "service_type_id": 2,
                                 "items": [
                                     {
                                         "name": spare_part["name"],
