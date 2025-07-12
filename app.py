@@ -19,7 +19,7 @@ from google.auth.transport import requests
 import json
 import uuid
 import shutil
-import requests
+import requests as http_requests
 from payos import PayOS, PaymentData, ItemData
 
 # Load biến môi trường
@@ -530,7 +530,7 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
                                 "Token": "8b6e9e38-5ed1-11f0-b272-6641004027c3",
                             }
 
-                            response = requests.post(GHN_API_URL, headers=headers, json=ghn_payload)
+                            response = http_requests.post(GHN_API_URL, headers=headers, json=ghn_payload)
                             ghn_data = response.json()
                             logger.info(f"GHN shipment created: {ghn_data}")
 
