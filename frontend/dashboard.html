@@ -31,6 +31,7 @@
                     <a href="/login" class="text-gray-600 hover:text-red-600 text-lg">Đăng nhập</a>
                 {% else %}
                     <a href="/dashboard" class="text-gray-600 hover:text-red-600 text-lg">Trang chính</a>
+                    
                     <a href="/api/auth/logout" class="text-gray-600 hover:text-red-600 text-lg" onclick="dangXuat(event)">Đăng xuất</a>
                 {% endif %}
             </div>
@@ -64,6 +65,14 @@
                 <a href="/instruction" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
                     <img src="/static/Instrc.jpg" alt="Hướng dẫn" class="mx-auto h-16 mb-2">
                     <p class="text-gray-800 font-semibold">Hướng dẫn</p>
+                </a>              
+                <a href="/cart" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/cart.jpg" alt="Giỏ hàng" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">giỏ hàng</p>
+                </a>
+                <a href="/spare_parts" class="bg-white p-4 rounded-lg shadow-md text-center hover:bg-gray-100">
+                    <img src="/static/spare_part.png" alt="Linh Kiện" class="mx-auto h-16 mb-2">
+                    <p class="text-gray-800 font-semibold">Linh Kiện</p>
                 </a>
             </div>
         </div>
