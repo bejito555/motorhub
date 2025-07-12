@@ -826,7 +826,7 @@ async def verify_otp(otp_verify: OTPVerify, response: Response):
             conn.commit()
             
             access_token = create_access_token(data={"sub": str(user_id)}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False)
+            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True)
             logger.info(f"Xác minh OTP và đăng ký thành công, user_id: {user_id}")
             return {"message": "Đăng ký thành công", "token": access_token}
     except sqlite3.Error as e:
@@ -856,7 +856,7 @@ async def google_login(google: GoogleLogin, response: Response):
                 user_id = db_user['id']
             
             access_token = create_access_token(data={"sub": str(user_id)}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False)
+            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True)
             logger.info(f"Đăng nhập/đăng ký Google thành công, user_id: {user_id}")
             return {"message": "Đăng nhập/đăng ký Google thành công", "token": access_token}
     except ValueError as e:
@@ -885,7 +885,7 @@ async def login(user: UserLogin, response: Response):
                 raise HTTPException(status_code=400, detail="Email hoặc mật khẩu không đúng")
             
             access_token = create_access_token(data={"sub": str(db_user["id"])}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-            response.set_cookie(key="access_token", value=access_token, httponly=False, secure=False)  # Đổi httponly=False cho test
+            response.set_cookie(key="access_token", value=access_token, httponly=False, secure=True)  # Đổi httponly=False cho test
             logger.info(f"Đăng nhập thành công, user_id: {db_user['id']}")
             return {"message": "Đăng nhập thành công", "token": access_token}
     except sqlite3.Error as e:
