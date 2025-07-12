@@ -1,0 +1,100 @@
+.spare-parts-section {
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+}
+
+.spare-parts-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.spare-part-item {
+    background-color: #fff;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.spare-part-item h3 {
+    margin: 0 0 10px;
+    color: #333;
+}
+
+.spare-part-item p {
+    margin: 5px 0;
+    color: #666;
+}
+
+.add-to-cart-btn {
+    background-color: #4CAF50;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.add-to-cart-btn:hover {
+    background-color: #45a049;
+}
+
+.cart-section {
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+}
+
+.cart-items {
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 20px;
+    background-color: #fff;
+}
+
+.cart-item {
+    margin-bottom: 15px;
+    padding: 10px;
+    border-bottom: 1px dotted #ccc;
+}
+
+.cart-item h3 {
+    margin: 0 0 5px;
+    color: #333;
+}
+
+.cart-item p {
+    margin: 2px 0;
+    color: #666;
+}
+
+.cart-total {
+    font-size: 1.2em;
+    font-weight: bold;
+    padding: 10px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+    text-align: right;
+}
+
+#payos-button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#payos-button:hover {
+    background-color: #45a049;
+}
