@@ -63,20 +63,9 @@ if not os.path.exists(os.path.dirname(SPARE_PARTS_FILE)):
 if not os.path.exists(os.path.dirname(CART_FILE)):
     os.makedirs(os.path.dirname(CART_FILE))
 
-
-
-
-
-
-
-
 GHN_TOKEN = "8b6e9e38-5ed1-11f0-b272-6641004027c3"  # Token từ GHN
 GHN_SHOP_ID = "4852193"  # ShopId từ GHN
 GHN_API_URL = "https://dev-online-gateway.ghn.vn/shiip/public-api/v2/shipping-order/create"  # Sandbox, đổi sang production khi triển khai
-
-
-
-
 
 # Thông tin ngân hàng cố định
 BANK_INFO = {
@@ -249,6 +238,7 @@ class RefreshTokenRequest(BaseModel):
 
 class CartPayment(BaseModel):
     pass
+
 class CartItem(BaseModel):
     spare_part_id: int
     quantity: int
@@ -306,7 +296,6 @@ async def create_post(title: str = Form(...), content: str = Form(...), image: U
         conn.commit()
     logger.info(f"Post created with ID {cursor.lastrowid} by user {current_user['id']}")
     return {"message": "Đăng bài thành công", "post_id": cursor.lastrowid}
-
 
 @app.get("/api/spare_parts")
 async def get_spare_parts():
@@ -526,8 +515,8 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
 
                             headers = {
                                 "Content-Type": "application/json",
-                                "ShopId": "4852193",
-                                "Token": "8b6e9e38-5ed1-11f0-b272-6641004027c3",
+                                "ShopId": GHN_SHOP_ID,
+                                "Token": GHN_TOKEN
                             }
 
                             response = http_requests.post(GHN_API_URL, headers=headers, json=ghn_payload)
@@ -1113,98 +1102,6 @@ async def delete_bike(bike: DeleteBike):
     except Exception as e:
         logger.error(f"Lỗi khi xóa xe: {e}")
         raise HTTPException(status_code=500, detail="Không thể xóa xe")
-
-@app.post("/api/book_maintenance")
-async def book_maintenance(booking: MaintenanceBooking):
-    file_path = MAINTENANCE_BOOKINGS_FILE
-    logger.debug(f"Booking data received: {booking.dict()}")
-    if not booking.location or not booking.date or not booking.bike_model:
-        raise HTTPException(status_code=400, detail="Vui lòng cung cấp đầy đủ thông tin (ngày, xe, địa điểm)")
-    
-    # Tạo bản ghi với định dạng chuẩn
-    new_booking = {
-        "user_id": booking.user_id,
-        "date": booking.date,
-        "bike_model": booking.bike_model,
-        "location": booking.location,
-        "payment_status": "unpaid",
-        "amount": booking.amount if booking.amount is not None else 2000
-
-    }
-    
-    try:
-        # Đọc dữ liệu hiện tại và thêm bản ghi mới
-        bookings = []
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read().strip().splitlines()
-                bookings = [json.loads(line) for line in content if line.strip()]
-        
-        bookings.append(new_booking)
-        with open(file_path, "w", encoding="utf-8") as f:
-            for booking_data in bookings:
-                json.dump(booking_data, f, ensure_ascii=False)
-                f.write("\n")
-        
-        logger.info(f"Successfully booked maintenance for user {booking.user_id} with location: {booking.location}")
-        return {"message": "Lịch bảo dưỡng đã được đặt thành công", "booking_id": len(bookings) - 1}
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error in maintenance_bookings.json: {e}")
-        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file lịch sử bảo dưỡng")
-    except Exception as e:
-        logger.error(f"Error booking maintenance: {e}")
-        raise HTTPException(status_code=500, detail="Không thể đặt lịch bảo dưỡng")
-
-@app.post("/api/update_profile")
-async def update_profile(user_update: UpdateUser, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Token không hợp lệ hoặc thiếu")
-    user_id = current_user["id"]
-    fullName = user_update.fullName
-    email = user_update.email
-    password = user_update.password
-    mobile = user_update.mobile
-    location = user_update.location
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE users SET fullName = ?, email = ?, password = ?, mobile = ?, location = ? WHERE id = ?",
-            (fullName, email, get_password_hash(password) if password else current_user["password"], mobile or current_user["mobile"], location or current_user["location"], user_id)
-        )
-        conn.commit()
-    return {"message": f"Đã cập nhật thông tin cho user {user_id}"}
-
-@app.post("/api/reset_password")
-async def reset_password(reset: ResetPassword):
-    logger.info(f"Nhận yêu cầu đặt lại mật khẩu cho user_id: {reset.user_id}")
-    try:
-        if reset.new_password != reset.confirm_password:
-            logger.warning("Mật khẩu mới và xác nhận không khớp")
-            raise HTTPException(status_code=400, detail="Mật khẩu mới và xác nhận không khớp")
-
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT password FROM users WHERE id = ?", (reset.user_id,))
-            db_user = cursor.fetchone()
-            if not db_user:
-                logger.warning(f"Không tìm thấy user với id: {reset.user_id}")
-                raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
-
-            if db_user["password"] and reset.old_password and not verify_password(reset.old_password, db_user["password"]):
-                logger.warning(f"Mật khẩu cũ không đúng cho user_id: {reset.user_id}")
-                raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng")
-
-            hashed_password = get_password_hash(reset.new_password)
-            cursor.execute(
-                "UPDATE users SET password = ? WHERE id = ?",
-                (hashed_password, reset.user_id)
-            )
-            conn.commit()
-            logger.info(f"Đã đặt lại mật khẩu cho user_id: {reset.user_id}")
-            return {"message": f"Đã đặt lại mật khẩu cho user {reset.user_id}"}
-    except sqlite3.Error as e:
-        logger.error(f"Lỗi database khi đặt lại mật khẩu: {e}")
-        raise HTTPException(status_code=500, detail="Đặt lại mật khẩu thất bại do lỗi database")
 
 @app.get("/api/vehicles")
 async def get_vehicles():
