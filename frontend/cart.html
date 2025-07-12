@@ -59,34 +59,19 @@
 
 <script>
     async function createPaymentLink() {
-        // Lấy và xử lý cookie một cách an toàn
-        let token = null;
-        const cookies = document.cookie.split('; ').reduce((acc, row) => {
-            const [name, value] = row.split('=');
-            acc[name] = value;
-            return acc;
-        }, {});
-        token = cookies['access_token'];
-        console.log('Token from cookie:', token); // Debug token
-
-        if (!token || token === 'undefined') {
-            alert('Vui lòng đăng nhập lại để tiếp tục. Token không hợp lệ.');
-            console.error('No valid token found in cookie');
-            window.location.href = '/login';
-            return;
-        }
-
         try {
             const response = await fetch('/api/create_payment_link_spare', {
                 method: 'POST',
+                credentials: 'include', // Gửi kèm cookie JWT từ trình duyệt
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({})
             });
+
             const data = await response.json();
-            console.log('Server response:', data); // Debug response
+            console.log('Server response:', data);
+
             if (data.checkout_url) {
                 window.location.href = data.checkout_url;
             } else {
