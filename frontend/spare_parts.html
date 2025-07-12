@@ -53,25 +53,29 @@
         {% endif %}
     </main>
 
-    <script>
-        $(document).ready(function() {
-            $(".add-to-cart-btn").click(function() {
-                const spare_part_id = $(this).data("id");
-                $.ajax({
-                    url: '/api/add_to_cart',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ spare_part_id: spare_part_id, quantity: 1 }),
-                    success: function(response) {
-                        alert(response.message);
-                        window.location.href = '/cart';
-                    },
-                    error: function(xhr) {
-                        alert('Lỗi khi thêm vào giỏ hàng: ' + xhr.responseJSON.detail);
-                    }
-                });
+   <script>
+    async function addToCart(spare_part_id) {
+        const token = document.cookie.split('; ').find(row => row.startsWith('access_token='))?.split('=')[1];
+        if (!token) {
+            alert('Vui lòng đăng nhập để thêm vào giỏ hàng.');
+            return;
+        }
+        try {
+            const response = await fetch('/api/add_to_cart', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({spare_part_id: spare_part_id, quantity: 1})
             });
-        });
-    </script>
+            const data = await response.json();
+            alert(data.message);  // Chỉ alert thành công, không redirect
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Đã xảy ra lỗi khi thêm vào giỏ hàng.');
+        }
+    }
+</script>
 </body>
 </html>
