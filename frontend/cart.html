@@ -6,6 +6,42 @@
     <title>Giỏ Hàng - MotoHub</title>
     <link rel="stylesheet" href="/static/css/style.css" onerror="this.style.display='none';">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        .cart-item {
+            border: 1px solid #ccc;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+        }
+        .cart-total {
+            text-align: right;
+            margin-top: 20px;
+        }
+        .cart-total button {
+            padding: 10px 20px;
+            font-weight: bold;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .cart-total button:hover {
+            background-color: #004a99;
+        }
+        .cart-item button {
+            margin-top: 10px;
+            background-color: #cc0000;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .cart-item button:hover {
+            background-color: #990000;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -38,6 +74,7 @@
                                 <p>Số lượng: {{ item.quantity }}</p>
                                 <p>Giá: {{ item.price * item.quantity }} VND</p>
                                 <p>Trạng thái: {{ item.payment_status }}</p>
+                                <button onclick="removeFromCart({{ item.spare_part_id }})">Xóa</button>
                             </div>
                         {% endfor %}
                     </div>
@@ -62,7 +99,7 @@
         try {
             const response = await fetch('/api/create_payment_link_spare', {
                 method: 'POST',
-                credentials: 'include', // Gửi kèm cookie JWT từ trình duyệt
+                credentials: 'include',  // Gửi cookie JWT
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -70,47 +107,31 @@
             });
 
             const data = await response.json();
-            console.log('Server response:', data);
-
             if (data.checkout_url) {
                 window.location.href = data.checkout_url;
             } else {
                 alert('Không thể tạo liên kết thanh toán: ' + (data.detail || 'Lỗi không xác định'));
-                console.error('Error response:', data.detail);
             }
         } catch (error) {
             console.error('Fetch error:', error);
             alert('Đã xảy ra lỗi khi tạo liên kết thanh toán: ' + error.message);
         }
     }
-</script>
-    <div class="cart-items">
-    {% for item in cart_items %}
-        <div class="cart-item">
-            <h3>{{ item.name }}</h3>
-            <p>Số lượng: {{ item.quantity }}</p>
-            <p>Giá: {{ item.price * item.quantity }} VND</p>
-            <p>Trạng thái: {{ item.payment_status }}</p>
-            <button onclick="removeFromCart({{ item.spare_part_id }})">Xóa</button>  <!-- Nút xóa mới -->
-        </div>
-    {% endfor %}
-</div>
 
-<script>
     async function removeFromCart(spare_part_id) {
-        const token = document.cookie.split('; ').find(row => row.startsWith('access_token=')).split('=')[1];
         try {
             const response = await fetch('/api/remove_from_cart', {
                 method: 'POST',
+                credentials: 'include',  // Gửi cookie JWT
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({spare_part_id: spare_part_id, quantity: 1})  // Quantity không cần nhưng giữ để khớp model
+                body: JSON.stringify({spare_part_id: spare_part_id, quantity: 1})
             });
+
             const data = await response.json();
             alert(data.message);
-            location.reload();  // Reload trang để cập nhật giỏ hàng
+            location.reload();
         } catch (error) {
             console.error('Lỗi:', error);
             alert('Đã xảy ra lỗi khi xóa khỏi giỏ hàng.');
