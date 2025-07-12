@@ -1,0 +1,26 @@
+[
+    {
+        "id": 1,
+        "name": "Bánh xe trước",
+        "price": 2000,
+        "stock": 10
+    },
+    {
+        "id": 2,
+        "name": "Ống xả",
+        "price": 2000,
+        "stock": 5
+    },
+    {
+        "id": 3,
+        "name": "Đèn pha LED",
+        "price": 2000,
+        "stock": 8
+    },
+    {
+        "id": 4,
+        "name": "Phuộc sau",
+        "price": 2000,
+        "stock": 12
+    }
+]

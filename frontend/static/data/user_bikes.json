@@ -13,5 +13,15 @@
         "user_id": 1,
         "bike_model": "Honda SH350i",
         "image": "sh350i.jpg"
+    },
+    {
+        "user_id": 1,
+        "bike_model": "Honda Vario 160",
+        "image": "vario-160.jpg"
+    },
+    {
+        "user_id": 1,
+        "bike_model": "Honda SH160i/125i",
+        "image": "sh160i-125i.jpg"
     }
 ]
