@@ -356,41 +356,39 @@ async def create_payment_link_spare(request: Request, current_user: Optional[sql
             logger.warning("No unpaid items found in cart for user")
             raise HTTPException(status_code=404, detail="Không tìm thấy giỏ hàng của người dùng")
 
-        # Load spare parts data
+        # Load spare parts
         with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
             spare_parts = json.load(f)
 
-        # Tính tổng tiền và danh sách item
         total_amount = 0
         items = []
         description_parts = []
-        order_code = int(f"{user_id}{int(datetime.utcnow().timestamp())}")  # Mã đơn hàng unique theo user + timestamp
+        order_code = int(f"{user_id}{int(datetime.utcnow().timestamp())}")
 
         for item in user_cart:
             spare_part = next((part for part in spare_parts if part["id"] == item["spare_part_id"]), None)
             if not spare_part:
                 logger.warning(f"Không tìm thấy linh kiện id: {item['spare_part_id']}")
-                continue  # Bỏ qua nếu linh kiện không còn tồn tại
+                continue
 
             item_price = spare_part["price"] * item["quantity"]
             total_amount += item_price
             items.append(ItemData(name=spare_part["name"], quantity=item["quantity"], price=spare_part["price"]))
             description_parts.append(spare_part["name"])
-
-            # Ghi lại orderCode vào item để sau này cập nhật payment_status
-            item["orderCode"] = order_code
+            item["orderCode"] = order_code  # gắn mã đơn cho item để cập nhật sau
 
         if not items:
             raise HTTPException(status_code=400, detail="Không có linh kiện hợp lệ để thanh toán")
 
-        # Viết lại file cart.json với orderCode
+        # Ghi lại cart.json có orderCode
         with open(CART_FILE, "w", encoding="utf-8") as f:
             for item in cart_items:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-        description = f"Thanh toán: {', '.join(description_parts)}"
-        if len(description) > 255:
-            description = description[:250] + "..."
+        # 💡 Rút gọn mô tả theo yêu cầu PayOS (tối đa 25 ký tự)
+        description = f"{len(items)} linh kiện từ MotoHub"
+        if len(description) > 25:
+            description = description[:22] + "..."
 
         payment_data = PaymentData(
             orderCode=order_code,
@@ -405,14 +403,15 @@ async def create_payment_link_spare(request: Request, current_user: Optional[sql
 
         result = payos.createPaymentLink(payment_data)
         if result and hasattr(result, 'checkoutUrl'):
-            logger.info(f"Tạo liên kết thanh toán thành công cho user {user_id}: {result.checkoutUrl}")
+            logger.info(f"Created payment link: {result.checkoutUrl}")
             return {"checkout_url": result.checkoutUrl}
         else:
-            logger.error("Không thể tạo liên kết thanh toán từ PayOS")
+            logger.error("PayOS không trả về checkoutUrl")
             raise HTTPException(status_code=500, detail="Không thể tạo liên kết thanh toán")
     except Exception as e:
         logger.exception("Lỗi khi tạo liên kết thanh toán")
         raise HTTPException(status_code=500, detail="Lỗi server")
+
 
     
 
