@@ -1068,6 +1068,38 @@ async def edit_bike(bike: EditBike):
         logger.error(f"Lỗi khi chỉnh sửa xe: {e}")
         raise HTTPException(status_code=500, detail="Không thể chỉnh sửa xe")
 
+
+@app.get("/orders", response_class=HTMLResponse)
+async def order_history(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not user:
+        return RedirectResponse(url="/login")
+
+    user_id = user["id"]
+    paid_items = []
+
+    if os.path.exists(CART_FILE):
+        with open(CART_FILE, "r", encoding="utf-8") as f:
+            cart_items = [json.loads(line) for line in f.read().strip().splitlines() if line.strip()]
+            paid_items = [item for item in cart_items if str(item.get("user_id")) == str(user_id) and item.get("payment_status") == "paid"]
+
+    # Gắn thông tin linh kiện
+    if os.path.exists(SPARE_PARTS_FILE):
+        with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
+            spare_parts = json.load(f)
+        for item in paid_items:
+            spare_part = next((part for part in spare_parts if part["id"] == item["spare_part_id"]), None)
+            if spare_part:
+                item["name"] = spare_part["name"]
+                item["price"] = spare_part["price"]
+
+    return templates.TemplateResponse("orders.html", {
+        "request": request,
+        "user": user,
+        "orders": paid_items
+    })
+
+
+
 @app.post("/api/delete_bike")
 async def delete_bike(bike: DeleteBike):
     user_id = bike.user_id
