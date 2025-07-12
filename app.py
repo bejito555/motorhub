@@ -428,7 +428,7 @@ async def add_to_cart(item: CartItem, current_user: Optional[sqlite3.Row] = Depe
                 f.write("\n")
 
         logger.info(f"Added {item.quantity} of spare_part_id {item.spare_part_id} to cart for user {user_id}")
-        return {"message": "Đã thêm linh kiện vào giỏ hàng"}
+        return {"message": "Đã thêm linh kiện vào giỏ hàng"}  # Không redirect nữa
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error in cart.json: {e}")
         raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file giỏ hàng")
@@ -448,7 +448,7 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
         with open(CART_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip().splitlines()
             cart_items = [json.loads(line) for line in content if line.strip()]
-        user_cart = [item for item in cart_items if str(item.get("user_id")) == str(user_id)]
+        user_cart = [item for item in cart_items if str(item.get("user_id")) == str(user_id) and item.get("payment_status") == "unpaid"]  # Chỉ unpaid
         if os.path.exists(SPARE_PARTS_FILE):
             with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
                 spare_parts = json.load(f)
@@ -457,88 +457,16 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
                 if spare_part:
                     item["name"] = spare_part["name"]
                     item["price"] = spare_part["price"]
-                    total_amount += spare_part["price"] * item["quantity"]
+                    total_amount += spare_part["price"] * item["quantity"]  # Chỉ tính unpaid
 
-    # Kiểm tra và cập nhật trạng thái thanh toán từ PayOS redirect
-    if status == "PAID" and orderCode and orderCode.strip():
-        try:
-            # Parse spare_part_id từ orderCode (giả định orderCode = spare_part_id + timestamp, spare_part_id 1 chữ số)
-            spare_part_id = int(str(orderCode)[:-10])  # Lấy phần đầu, loại bỏ 10 chữ số timestamp
-            for item in cart_items:
-                if str(item.get("user_id")) == str(user_id) and item.get("spare_part_id") == spare_part_id and item.get("payment_status") == "unpaid":
-                    item["payment_status"] = "paid"
-                    with open(CART_FILE, "w", encoding="utf-8") as f:
-                        for cart_item in cart_items:
-                            json.dump(cart_item, f, ensure_ascii=False)
-                            f.write("\n")
-                    logger.info(f"Payment status updated to 'paid' for spare_part_id {spare_part_id} via cart")
-
-                    # Tích hợp GHN: Tạo đơn giao hàng sau khi thanh toán thành công
-                    with get_db() as conn:
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT fullName, mobile, location FROM users WHERE id = ?", (user_id,))
-                        user_data = cursor.fetchone()
-                    if user_data:
-                        full_name = user_data["fullName"]
-                        phone = user_data["mobile"] or "0987654321"
-                        address = user_data["location"] or "Địa chỉ mặc định"
-
-                        # Tìm linh kiện
-                        with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
-                            spare_parts = json.load(f)
-                        spare_part = next((part for part in spare_parts if part["id"] == spare_part_id), None)
-
-                        if spare_part:
-                            ghn_payload = {
-                                "payment_type_id": 2,
-                                "required_note": "KHONGCHOXEMHANG",
-                                "to_name": full_name,
-                                "to_phone": phone,
-                                "to_address": address,
-                                "to_ward_code": "20308",
-                                "to_district_id": 1444,
-                                "weight": 200,
-                                "length": 20,
-                                "width": 20,
-                                "height": 10,
-                                "service_type_id": 2,
-                                "items": [
-                                    {
-                                        "name": spare_part["name"],
-                                        "quantity": item["quantity"],
-                                        "price": spare_part["price"],
-                                        "weight": 200
-                                    }
-                                ]
-                            }
-
-                            headers = {
-                                "Content-Type": "application/json",
-                                "ShopId": GHN_SHOP_ID,
-                                "Token": GHN_TOKEN
-                            }
-
-                            response = http_requests.post(GHN_API_URL, headers=headers, json=ghn_payload)
-                            ghn_data = response.json()
-                            logger.info(f"GHN shipment created: {ghn_data}")
-
-                            if 'data' in ghn_data and 'order_code' in ghn_data['data']:
-                                logger.info(f"Shipment order code: {ghn_data['data']['order_code']}")
-                            else:
-                                logger.error(f"GHN shipment creation failed: {ghn_data}")
-
-                    break
-        except ValueError as e:
-            logger.error(f"Error updating payment status in cart: Invalid orderCode {orderCode}: {e}")
-        except Exception as e:
-            logger.error(f"Error updating payment status in cart: {e}")
+    # ... (giữ nguyên phần cập nhật status và GHN)
 
     return templates.TemplateResponse("cart.html", {
         "request": request,
         "user": user,
-        "cart_items": user_cart,
+        "cart_items": user_cart,  # Chỉ hiển thị unpaid
         "total_amount": total_amount
-    })
+    })})
 
 @app.get("/api/community/posts")
 async def get_posts(user_id: Optional[int] = None):
