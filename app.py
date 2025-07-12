@@ -466,7 +466,7 @@ async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_
         "user": user,
         "cart_items": user_cart,  # Chỉ hiển thị unpaid
         "total_amount": total_amount
-    })})
+    })
 
 @app.get("/api/community/posts")
 async def get_posts(user_id: Optional[int] = None):
