@@ -19,6 +19,7 @@ from google.auth.transport import requests
 import json
 import uuid
 import shutil
+import requests
 from payos import PayOS, PaymentData, ItemData
 
 # Load biến môi trường
@@ -50,10 +51,32 @@ DATABASE = os.path.join(BASE_DIR, "mvp50cc.db")
 IMAGE_UPLOAD_DIR = os.path.join(BASE_DIR, "frontend", "static", "images")
 MAINTENANCE_BOOKINGS_FILE = os.path.join(BASE_DIR, "frontend", "static", "data", "maintenance_bookings.json")
 
+SPARE_PARTS_FILE = os.path.join(BASE_DIR, "frontend", "static", "data", "spare_parts.json")
+CART_FILE = os.path.join(BASE_DIR, "frontend", "static", "data", "cart.json")
+
 if not os.path.exists(IMAGE_UPLOAD_DIR):
     os.makedirs(IMAGE_UPLOAD_DIR)
 if not os.path.exists(os.path.dirname(MAINTENANCE_BOOKINGS_FILE)):
     os.makedirs(os.path.dirname(MAINTENANCE_BOOKINGS_FILE))
+if not os.path.exists(os.path.dirname(SPARE_PARTS_FILE)):
+    os.makedirs(os.path.dirname(SPARE_PARTS_FILE))
+if not os.path.exists(os.path.dirname(CART_FILE)):
+    os.makedirs(os.path.dirname(CART_FILE))
+
+
+
+
+
+
+
+
+GHN_TOKEN = "8b6e9e38-5ed1-11f0-b272-6641004027c3"  # Token từ GHN
+GHN_SHOP_ID = "4852193"  # ShopId từ GHN
+GHN_API_URL = "https://dev-online-gateway.ghn.vn/shiip/public-api/v2/shipping-order/create"  # Sandbox, đổi sang production khi triển khai
+
+
+
+
 
 # Thông tin ngân hàng cố định
 BANK_INFO = {
@@ -224,30 +247,42 @@ class RefreshTokenRequest(BaseModel):
     email: str
     password: str
 
+class CartPayment(BaseModel):
+    pass
+class CartItem(BaseModel):
+    spare_part_id: int
+    quantity: int
+
 async def get_current_user(request: Request):
-    token = request.cookies.get("access_token")
-    logger.debug(f"Received token: {token}")
-    if token:
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            user_id = payload.get("sub")
-            if not user_id or not user_id.isdigit():
-                logger.warning("Invalid user_id in token payload")
-                return None
-            with get_db() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, fullName, email, password, last_maintenance_date, mobile, location FROM users WHERE id = ?", (int(user_id),))
-                user = cursor.fetchone()
-                if user is None:
-                    logger.warning(f"No user found with id: {user_id}")
-                    return None
-                logger.debug(f"Authenticated user: {user['id']} with payload: {payload}")
-                return user
-        except JWTError as e:
-            logger.warning(f"JWT decoding error: {e}")
+    token = request.headers.get("Authorization")
+    if token and token.startswith("Bearer "):
+        token = token.replace("Bearer ", "")
+        logger.debug(f"Token from header: {token}")
+    else:
+        token = request.cookies.get("access_token")
+        logger.debug(f"Token from cookie: {token}")
+    if not token:
+        logger.warning("No token found in request")
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        logger.debug(f"Decoded payload: {payload}")
+        user_id = payload.get("sub")
+        if not user_id or not user_id.isdigit():
+            logger.warning(f"Invalid user_id in token payload: {user_id}")
             return None
-    logger.debug("No token found in request")
-    return None
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, fullName, email, password, last_maintenance_date, mobile, location FROM users WHERE id = ?", (int(user_id),))
+            user = cursor.fetchone()
+            if user is None:
+                logger.warning(f"No user found with id: {user_id}")
+                return None
+            logger.info(f"Authenticated user: {user['id']} with payload: {payload}")
+            return user
+    except JWTError as e:
+        logger.error(f"JWT decoding error: {e}")
+        return None
 
 # Community endpoints
 @app.post("/api/community/post")
@@ -272,6 +307,26 @@ async def create_post(title: str = Form(...), content: str = Form(...), image: U
     logger.info(f"Post created with ID {cursor.lastrowid} by user {current_user['id']}")
     return {"message": "Đăng bài thành công", "post_id": cursor.lastrowid}
 
+
+@app.get("/api/spare_parts")
+async def get_spare_parts():
+    spare_parts_file = os.path.join(BASE_DIR, "frontend", "static", "data", "spare_parts.json")
+    if os.path.exists(spare_parts_file):
+        with open(spare_parts_file, "r", encoding="utf-8") as f:
+            try:
+                spare_parts = json.load(f)
+                return {"spare_parts": spare_parts}
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=500, detail="Lỗi đọc file spare_parts.json")
+    return {"spare_parts": [], "message": "Không tìm thấy danh sách linh kiện"}
+
+@app.get("/spare_parts", response_class=HTMLResponse)
+async def spare_parts_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not user:
+        return RedirectResponse(url="/login")
+    spare_parts_data = await get_spare_parts()
+    return templates.TemplateResponse("spare_parts.html", {"request": request, "user": user, "spare_parts": spare_parts_data["spare_parts"]})
+
 @app.post("/api/community/comment")
 async def add_comment(post_id: int = Form(...), content: str = Form(...), current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
     if not current_user:
@@ -288,6 +343,214 @@ async def add_comment(post_id: int = Form(...), content: str = Form(...), curren
         conn.commit()
     logger.info(f"Comment added to post {post_id} by user {current_user['id']}")
     return {"message": "Bình luận thành công"}
+
+@app.post("/api/create_payment_link_spare")
+async def create_payment_link_spare(request: Request, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        logger.error("User not authenticated")
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để tạo liên kết thanh toán")
+    
+    user_id = current_user["id"]
+    logger.debug(f"Processing payment for user_id: {user_id}")
+    try:
+        cart_items = []
+        if os.path.exists(CART_FILE):
+            with open(CART_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                cart_items = [json.loads(line) for line in content if line.strip()]
+        logger.debug(f"Cart items loaded: {cart_items}")
+        
+        user_cart = [item for item in cart_items if str(item.get("user_id")) == str(user_id) and item.get("payment_status") == "unpaid"]
+        logger.debug(f"User cart items: {user_cart}")
+        if not user_cart:
+            logger.warning("No unpaid items found in cart for user")
+            raise HTTPException(status_code=404, detail="Không tìm thấy giỏ hàng của người dùng")
+
+        item = user_cart[0]  # Thanh toán từng linh kiện
+        logger.debug(f"Selected item for payment: {item}")
+        if os.path.exists(SPARE_PARTS_FILE):
+            with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
+                spare_parts = json.load(f)
+            spare_part = next((part for part in spare_parts if part["id"] == item["spare_part_id"]), None)
+            if not spare_part:
+                logger.error(f"Spare part not found for id: {item['spare_part_id']}")
+                raise HTTPException(status_code=404, detail="Linh kiện không tồn tại")
+
+            total_amount = spare_part["price"] * item["quantity"]
+            description = f"Payment for {spare_part['name']} by user {user_id}"
+            if len(description) > 25:
+                description = description[:25]
+            logger.debug(f"Payment details: amount={total_amount}, description={description}")
+
+            order_code = int(f"{item['spare_part_id']}{int(datetime.utcnow().timestamp())}")
+            items = [ItemData(name=spare_part["name"], quantity=item["quantity"], price=spare_part["price"])]
+
+            payment_data = PaymentData(
+                orderCode=order_code,
+                amount=total_amount,
+                description=description,
+                items=items,
+                returnUrl=f"{request.base_url}cart?orderCode={order_code}",
+                cancelUrl=f"{request.base_url}cart"
+            )
+            logger.debug(f"Payment data created: {payment_data.__dict__}")
+
+            result = payos.createPaymentLink(payment_data)
+            if result and hasattr(result, 'checkoutUrl'):
+                checkout_url = result.checkoutUrl
+                logger.info(f"Created payment link for spare_part_id {item['spare_part_id']} of user {user_id} with orderCode {order_code}: {checkout_url}")
+                return {"checkout_url": checkout_url}
+            else:
+                logger.error("Failed to get checkout URL from PayOS")
+                raise HTTPException(status_code=500, detail="Không thể lấy URL thanh toán từ PayOS")
+    except HTTPException as http_err:
+        logger.error(f"HTTP Exception: {http_err.detail}")
+        raise http_err
+    except Exception as e:
+        logger.error(f"Lỗi khi tạo liên kết thanh toán cho giỏ hàng: {str(e)}")
+        raise HTTPException(status_code=500, detail="Không thể tạo liên kết thanh toán do lỗi server")
+    
+
+@app.post("/api/add_to_cart")
+async def add_to_cart(item: CartItem, current_user: Optional[sqlite3.Row] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để thêm vào giỏ hàng")
+    
+    user_id = current_user["id"]
+    try:
+        if os.path.exists(SPARE_PARTS_FILE):
+            with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
+                spare_parts = json.load(f)
+            spare_part = next((part for part in spare_parts if part["id"] == item.spare_part_id), None)
+            if not spare_part or spare_part["stock"] < item.quantity:
+                raise HTTPException(status_code=400, detail="Linh kiện không tồn tại hoặc số lượng không đủ")
+
+        cart_items = []
+        if os.path.exists(CART_FILE):
+            with open(CART_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip().splitlines()
+                cart_items = [json.loads(line) for line in content if line.strip()]
+
+        cart_item = {"user_id": user_id, "spare_part_id": item.spare_part_id, "quantity": item.quantity, "payment_status": "unpaid"}
+        cart_items.append(cart_item)
+        with open(CART_FILE, "w", encoding="utf-8") as f:
+            for item_data in cart_items:
+                json.dump(item_data, f, ensure_ascii=False)
+                f.write("\n")
+
+        logger.info(f"Added {item.quantity} of spare_part_id {item.spare_part_id} to cart for user {user_id}")
+        return {"message": "Đã thêm linh kiện vào giỏ hàng"}
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in cart.json: {e}")
+        raise HTTPException(status_code=500, detail="Lỗi cú pháp trong file giỏ hàng")
+    except Exception as e:
+        logger.error(f"Error adding to cart: {e}")
+        raise HTTPException(status_code=500, detail="Không thể thêm vào giỏ hàng")
+
+@app.get("/cart", response_class=HTMLResponse)
+async def cart_page(request: Request, user: Optional[sqlite3.Row] = Depends(get_current_user), status: str = None, orderCode: str = None):
+    if not user:
+        return RedirectResponse(url="/login")
+    
+    user_id = user["id"]
+    cart_items = []
+    total_amount = 0
+    if os.path.exists(CART_FILE):
+        with open(CART_FILE, "r", encoding="utf-8") as f:
+            content = f.read().strip().splitlines()
+            cart_items = [json.loads(line) for line in content if line.strip()]
+        user_cart = [item for item in cart_items if str(item.get("user_id")) == str(user_id)]
+        if os.path.exists(SPARE_PARTS_FILE):
+            with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
+                spare_parts = json.load(f)
+            for item in user_cart:
+                spare_part = next((part for part in spare_parts if part["id"] == item["spare_part_id"]), None)
+                if spare_part:
+                    item["name"] = spare_part["name"]
+                    item["price"] = spare_part["price"]
+                    total_amount += spare_part["price"] * item["quantity"]
+
+    # Kiểm tra và cập nhật trạng thái thanh toán từ PayOS redirect
+    if status == "PAID" and orderCode and orderCode.strip():
+        try:
+            spare_part_id = int(orderCode.split("_")[0]) if "_" in orderCode else int(orderCode)
+            for item in cart_items:
+                if str(item.get("user_id")) == str(user_id) and item.get("spare_part_id") == spare_part_id and item.get("payment_status") == "unpaid":
+                    item["payment_status"] = "paid"
+                    with open(CART_FILE, "w", encoding="utf-8") as f:
+                        for cart_item in cart_items:
+                            json.dump(cart_item, f, ensure_ascii=False)
+                            f.write("\n")
+                    logger.info(f"Payment status updated to 'paid' for spare_part_id {spare_part_id} via cart")
+
+                    # Tích hợp GHN: Tạo đơn giao hàng sau khi thanh toán thành công
+                    # Lấy thông tin user từ database (địa chỉ, điện thoại, ...)
+                    with get_db() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT fullName, mobile, location FROM users WHERE id = ?", (user_id,))
+                        user_data = cursor.fetchone()
+                    if user_data:
+                        full_name = user_data["fullName"]
+                        phone = user_data["mobile"] or "0987654321"  # Placeholder nếu không có
+                        address = user_data["location"] or "Địa chỉ mặc định"  # Placeholder nếu không có
+
+                        # Tìm linh kiện từ spare_parts.json
+                        with open(SPARE_PARTS_FILE, "r", encoding="utf-8") as f:
+                            spare_parts = json.load(f)
+                        spare_part = next((part for part in spare_parts if part["id"] == spare_part_id), None)
+
+                        if spare_part:
+                            # Payload cho GHN API (tùy chỉnh theo nhu cầu)
+                            ghn_payload = {
+                                "payment_type_id": 2,  # 2: Người nhận trả phí
+                                "required_note": "KHONGCHOXEMHANG",
+                                "to_name": full_name,
+                                "to_phone": phone,
+                                "to_address": address,
+                                "to_ward_code": "20308",  # Mã phường mặc định (thay bằng thực tế)
+                                "to_district_id": 1444,  # ID quận mặc định (thay bằng thực tế)
+                                "weight": 200,  # Trọng lượng mặc định (gram)
+                                "length": 20,  # Chiều dài (cm)
+                                "width": 20,  # Chiều rộng (cm)
+                                "height": 10,  # Chiều cao (cm)
+                                "service_type_id": 2,  # Loại dịch vụ (2: Tiết kiệm)
+                                "items": [
+                                    {
+                                        "name": spare_part["name"],
+                                        "quantity": item["quantity"],
+                                        "price": spare_part["price"],
+                                        "weight": 200
+                                    }
+                                ]
+                            }
+
+                            headers = {
+                                "Content-Type": "application/json",
+                                "ShopId": "4852193",
+                                "Token": "8b6e9e38-5ed1-11f0-b272-6641004027c3",
+                            }
+
+                            response = requests.post(GHN_API_URL, headers=headers, json=ghn_payload)
+                            ghn_data = response.json()
+                            logger.info(f"GHN shipment created: {ghn_data}")
+
+                            if 'data' in ghn_data and 'order_code' in ghn_data['data']:
+                                logger.info(f"Shipment order code: {ghn_data['data']['order_code']}")
+                            else:
+                                logger.error(f"GHN shipment creation failed: {ghn_data}")
+
+                    break
+        except ValueError as e:
+            logger.error(f"Error updating payment status in cart: Invalid orderCode {orderCode}: {e}")
+        except Exception as e:
+            logger.error(f"Error updating payment status in cart: {e}")
+
+    return templates.TemplateResponse("cart.html", {
+        "request": request,
+        "user": user,
+        "cart_items": user_cart,
+        "total_amount": total_amount
+    })
 
 @app.get("/api/community/posts")
 async def get_posts(user_id: Optional[int] = None):
@@ -622,7 +885,7 @@ async def login(user: UserLogin, response: Response):
                 raise HTTPException(status_code=400, detail="Email hoặc mật khẩu không đúng")
             
             access_token = create_access_token(data={"sub": str(db_user["id"])}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-            response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False)
+            response.set_cookie(key="access_token", value=access_token, httponly=False, secure=False)  # Đổi httponly=False cho test
             logger.info(f"Đăng nhập thành công, user_id: {db_user['id']}")
             return {"message": "Đăng nhập thành công", "token": access_token}
     except sqlite3.Error as e:
